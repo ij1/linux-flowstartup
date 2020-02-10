@@ -403,7 +403,8 @@ static void dctcp_release(struct sock *sk)
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
 	u32 N = chirp->qdelay_index;
-	int i, j, l = N-1;
+	int i, j;
+	int last_sample = N - 1;
 	u64 gap_avg = 0;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
@@ -451,13 +452,13 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	if (cnt && cnt + start == N) {
 		for (j = start; j < start + cnt; ++j)
 			E[j] = s[start];
-		l = start;
+		last_sample = start;
 	}
 
 	/* Calculate the average gap */
 	for (i = 1; i < N; ++i) {
 		if (E[i] == 0)
-			gap_avg += s[l];
+			gap_avg += s[last_sample];
 		else
 			gap_avg += E[i];
 	}
