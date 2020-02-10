@@ -3338,7 +3338,7 @@ static void tcp_cong_control(struct sock *sk, u32 ack, u32 acked_sacked,
 		/* Advance cwnd if state allows */
 		tcp_cong_avoid(sk, ack, acked_sacked);
 	}
-	if (!tcp_sk(sk)->disable_kernel_pacing_calculation)
+	if (tcp_sk(sk)->chirp == NULL)
 		tcp_update_pacing_rate(sk);
 }
 
@@ -6277,7 +6277,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (tp->rx_opt.tstamp_ok)
 			tp->advmss -= TCPOLEN_TSTAMP_ALIGNED;
 
-		if (!inet_csk(sk)->icsk_ca_ops->cong_control && !tp->disable_kernel_pacing_calculation)
+		if (!inet_csk(sk)->icsk_ca_ops->cong_control && tp->chirp == NULL)
 			tcp_update_pacing_rate(sk);
 
 		/* Prevent spurious tcp_cwnd_restart() on first data packet */

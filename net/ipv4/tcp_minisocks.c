@@ -491,7 +491,6 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	INIT_LIST_HEAD(&newtp->tsorted_sent_queue);
 
 	newtp->disable_cwr_upon_ece = 0;
-	newtp->disable_kernel_pacing_calculation = 0;
 
 	tcp_init_wl(newtp, treq->rcv_isn);
 

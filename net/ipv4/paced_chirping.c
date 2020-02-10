@@ -235,7 +235,6 @@ static void exit_paced_chirping(struct sock *sk, struct tcp_sock *tp, struct dct
 	}
 	tp->chirp = NULL;
 	tp->disable_cwr_upon_ece = 0;
-	tp->disable_kernel_pacing_calculation = 0;
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NEEDED, SK_PACING_NONE);
 	sk->sk_pacing_rate = ~0U;
 	ca->pc_state = 0;
@@ -615,7 +614,6 @@ static void init_paced_chirping(struct sock *sk, struct tcp_sock *tp,
 	/* Alter kernel behaviour*/
 	sk->sk_pacing_rate = ~0U; /*This disables pacing until I explicitly set it.*/
 	sk_pacing_shift_update(sk, 5);
-	tp->disable_kernel_pacing_calculation = 1;
 	tp->disable_cwr_upon_ece = 1;
 	tp->chirp = &(ca->chirp);
 
