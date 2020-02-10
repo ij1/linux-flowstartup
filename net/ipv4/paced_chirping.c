@@ -407,11 +407,9 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u64 gap_avg = 0;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
-	u32 max_q = 0;
+	s32 max_q = 0;
 	u32 start = 0, cnt = 0;	/* Excursion start index & len */
 	u32 E[CHIRP_SIZE];
-
-	int q_diff = 0;
 
 	s = chirp->scheduled_gaps;
 
@@ -427,10 +425,9 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		E[i] = 0;
 		if (cnt) {
 			/* Excursion continues? */
-			q_diff = (int)qdelay[i] - (int)qdelay[start];
-			if (q_diff >= 0 &&
-			    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
-				max_q = max(max_q, (u32)q_diff);
+			s32 q_diff = (s32)(qdelay[i] - qdelay[start]);
+			if (q_diff > (max_q >> 1) + (max_q >> 3)) {
+				max_q = max(max_q, q_diff);
 				cnt++;
 			} else {
 				/* Excursion has ended or never started */
@@ -446,7 +443,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		/* Start new excursion */
 		if (!cnt && (i < (N-1)) && (qdelay[i] < qdelay[i+1])) {
 			start = i;
-			max_q = 0U;
+			max_q = 0;
 			cnt = 1;
 		}
 	}
