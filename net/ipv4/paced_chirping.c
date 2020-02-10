@@ -108,16 +108,16 @@ struct dctcp {
 	u8 pc_state;
 	struct cc_chirp *chirp_list;
 
-	u32 gap_avg_ns;      /*Average gap (estimate)*/
-	u32 round_length_us; /*Used for termination condition*/
+	u32 gap_avg_ns;      /* Average gap (estimate) */
+	u32 round_length_us; /* Used for termination condition */
 	u32 chirp_number;
-	u32 M;               /*Maximum number of chirps in a round*/
-	u32 round_start;     /*Chirp number of the first chirp in the round*/
-	u32 round_sent;      /*Number of chirps sent in the round*/
-	u16 gain;            /*Increase of number of chirps*/
-	u16 geometry;        /*Range to probe for*/
+	u32 M;               /* Maximum number of chirps in a round */
+	u32 round_start;     /* Chirp number of the first chirp in the round */
+	u32 round_sent;      /* Number of chirps sent in the round */
+	u16 gain;            /* Increase of number of chirps */
+	u16 geometry;        /* Range to probe for */
 
-	/*Memory caching*/
+	/* Memory caching */
 	u16 cache_index;
 	struct cc_chirp *memory_cache;
 };
@@ -135,8 +135,8 @@ module_param(dctcp_clamp_alpha_on_loss, uint, 0644);
 MODULE_PARM_DESC(dctcp_clamp_alpha_on_loss,
 		 "parameter for clamping alpha on loss");
 
-/*TODO This value has to be changed*/
-/*Paced Chirping parameters*/
+/* TODO This value has to be changed */
+/* Paced Chirping parameters */
 static unsigned int dctcp_pc_enabled __read_mostly = 1;
 module_param(dctcp_pc_enabled, uint, 0644);
 MODULE_PARM_DESC(dctcp_pc_enabled, "Enable paced chirping (Default: 0)");
@@ -153,7 +153,7 @@ static unsigned int dctcp_pc_L __read_mostly = 5;
 module_param(dctcp_pc_L, uint, 0644);
 MODULE_PARM_DESC(dctcp_pc_L, "Number of packets that make up an excursion");
 
-/* TODO: Figure out of the sensistivty in the anlaysis can be a parameter*/
+/* TODO: Figure out of the sensitivity in the analysis can be a parameter */
 
 static struct tcp_congestion_ops dctcp_reno;
 
@@ -327,7 +327,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	else if (ca->chirp_number <= 3)
 		N = 8;
 
-	/*Send marking packet*/
+	/* Send marking packet */
 	if (!(ca->pc_state & MARKING_PKT_SENT) && /* Not sent already */
 	    (cur_chirp = get_first_chirp(ca)) &&
 	    cur_chirp->chirp_number == 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
@@ -336,15 +336,15 @@ static u32 dctcp_new_chirp (struct sock *sk)
 		return 0;
 	}
 
-	/* Do not queue excessively in qDisc etc.*/
+	/* Do not queue excessively in qDisc etc */
 	if (enough_data_committed(sk, tp))
 		return 1;
 
 	if (ca->round_sent >= (ca->M>>M_SHIFT))
 		return 1;
 
-	/*TODO: Use TCP slow start as fallback.*/
-	/*Better to mark chirp as possible*/
+	/* TODO: Use TCP slow start as fallback */
+	/* Better to mark chirp as possible */
 	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))
 		return 0;
 
@@ -419,7 +419,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 	if (N < 2)
 		return INVALID_CHIRP;
-	if (chirp->ack_cnt < N>>1) /* Ack aggregation is too great*/
+	if (chirp->ack_cnt < N>>1) /* Ack aggregation is too great */
 		return INVALID_CHIRP;
 
 	for (i = 1; i < N; ++i) {
@@ -427,14 +427,15 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		if (i < (N-1) && (s[i]<<1) < s[i+1])
 			return INVALID_CHIRP;
 		E[i] = 0;
-		/*Check if currently tracking a possible excursion*/
+		/* Check if currently tracking a possible excursion */
 		q_diff = (int)q[i] - (int)q[excursion_start];
 
 		if (excursion_cnt && q_diff >= 0 &&
 		    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
 			max_q = max(max_q, (u32)q_diff);
 			excursion_cnt++;
-		} else { /*Excursion has ended or never started.*/
+		} else {
+			/* Excursion has ended or never started */
 			if (excursion_cnt >= L) {
 				for (j = excursion_start;
 				     j < excursion_start + excursion_cnt;
@@ -446,7 +447,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			excursion_cnt = excursion_start = max_q = 0;
 		}
 
-		/*Start new excursion*/
+		/* Start new excursion */
 		if (!excursion_cnt && (i < (N-1)) && (q[i] < q[i+1])) {
 			excursion_start = i;
 			max_q = 0U;
@@ -464,7 +465,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		l = excursion_start;
 	}
 
-	/*Calculate the average gap*/
+	/* Calculate the average gap */
 	for (i = 1; i < N; ++i) {
 		if (E[i] == 0)
 			gap_avg += (uint32_t)s[l];
@@ -490,7 +491,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 	if (!ca->pc_state || rtt_us == 0 || sample->pkts_acked == 0)
 		return;
 
-	/* We have terminated, but are waiting for scheduled packet to be sent*/
+	/* We have terminated, but are waiting for scheduled packet to be sent */
 	if (ca->pc_state & STATE_TRANSITION) {
 		if ((ca->round_sent++ > (ca->round_start)))
 			exit_paced_chirping(sk);
@@ -526,13 +527,13 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 		}
 
 		if (cur_chirp->qdelay_index != cur_chirp->N) {
-			/*Does not matter if we use minimum rtt for this chirp of for the duration of
+			/* Does not matter if we use minimum rtt for this chirp of for the duration of
 			 * the connection because the analysis uses relative queue delay in analysis.
 			 * Assumes no reordering or loss. Have to link seq number to array index. */
 			cur_chirp->qdelay[cur_chirp->qdelay_index++] = rtt_us - tcp_min_rtt(tp);
 		}
 
-		/*Chirp is completed*/
+		/* Chirp is completed */
 		if (cur_chirp->qdelay_index >= cur_chirp->N &&
 		    (cur_chirp->fully_sent && !after(cur_chirp->end_seq, tp->snd_una))) {
 			new_estimate = analyze_chirp(sk, cur_chirp);
@@ -551,7 +552,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 				u32 rate = gap_ns_to_rate(sk, tp, min(5000000U, ca->gap_avg_ns));
 				sk->sk_pacing_rate = rate;
 
-				/*Send for one bdp*/
+				/* Send for one bdp */
 				ca->round_sent = 0;
 				ca->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)ca->gap_avg_ns));
 				tp->snd_cwnd = max((u32)(ca->round_start<<1), 10U);
@@ -603,8 +604,7 @@ static void init_paced_chirping(struct sock *sk, struct tcp_sock *tp,
 		}
 	}
 
-	/* Alter kernel behaviour*/
-	sk->sk_pacing_rate = ~0U; /*This disables pacing until I explicitly set it.*/
+	sk->sk_pacing_rate = ~0U; /* Disable pacing until explicitly set */
 	sk_pacing_shift_update(sk, 5);
 	tp->chirp = &(ca->chirp);
 
@@ -811,7 +811,6 @@ static struct tcp_congestion_ops dctcp_reno __read_mostly = {
 	//.cong_avoid	= tcp_reno_cong_avoid,
 	.undo_cwnd	= tcp_reno_undo_cwnd,
 
-	/*new*/
 	.cong_avoid     = dctcp_cong_avoid,
 	.release        = dctcp_release,
 	.pkts_acked     = dctcp_acked,

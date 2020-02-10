@@ -1064,7 +1064,8 @@ static void tcp_update_skb_after_send(struct sock *sk, struct sk_buff *skb,
 				}
 
 				if (chirp->packets_out == chirp->packets) {
-					tp->tcp_wstamp_ns += chirp->guard_interval_ns; /*Don't care about credits here*/
+					/* Don't care about credits here */
+					tp->tcp_wstamp_ns += chirp->guard_interval_ns;
 					chirp->end_seq = tp->snd_nxt + skb->len;
 					inet_csk(sk)->icsk_ca_ops->new_chirp(sk);
 				} else {
