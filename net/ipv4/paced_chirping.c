@@ -414,8 +414,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 	s = chirp->scheduled_gaps;
 
-	if (N < 2)
-		return INVALID_CHIRP;
 	if (chirp->ack_cnt < N >> 1)	/* Ack aggregation is too great? */
 		return INVALID_CHIRP;
 
