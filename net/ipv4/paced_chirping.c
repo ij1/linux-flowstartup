@@ -227,8 +227,11 @@ static u32 gap_ns_to_rate(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
 }
 
 
-static void exit_paced_chirping(struct sock *sk, struct tcp_sock *tp, struct dctcp *ca, u32 reason)
+static void exit_paced_chirping(struct sock *sk)
 {
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct dctcp *ca = inet_csk_ca(sk);
+
 	if (ca->pc_state) {
 		tp->snd_cwnd = max(tp->packets_out, 2U);
 		tp->snd_ssthresh = tp->snd_cwnd;
@@ -489,9 +492,8 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 
 	/* We have terminated, but are waiting for scheduled packet to be sent*/
 	if (ca->pc_state & STATE_TRANSITION) {
-		if ((ca->round_sent++ > (ca->round_start))) {
-			exit_paced_chirping(sk, tp, ca, EXIT_TRANSITION);
-		}
+		if ((ca->round_sent++ > (ca->round_start)))
+			exit_paced_chirping(sk);
 		return;
 	}
 	if(!(cur_chirp = get_first_chirp(ca)))
@@ -722,9 +724,9 @@ static void dctcp_update_alpha(struct sock *sk, u32 flags)
 
 static void dctcp_state(struct sock *sk, u8 new_state)
 {
-	if (dctcp_clamp_alpha_on_loss && new_state == TCP_CA_Loss) {
-		struct dctcp *ca = inet_csk_ca(sk);
+	struct dctcp *ca = inet_csk_ca(sk);
 
+	if (dctcp_clamp_alpha_on_loss && new_state == TCP_CA_Loss) {
 		/* If this extension is enabled, we clamp dctcp_alpha to
 		 * max on packet loss; the motivation is that dctcp_alpha
 		 * is an indicator to the extend of congestion and packet
@@ -734,12 +736,8 @@ static void dctcp_state(struct sock *sk, u8 new_state)
 		 * window by half.
 		 */
 		ca->dctcp_alpha = DCTCP_MAX_ALPHA;
-	} else if (new_state == TCP_CA_Loss) {
-		struct dctcp *ca = inet_csk_ca(sk);
-		if (ca->pc_state) {
-			exit_paced_chirping(sk, tcp_sk(sk), ca, EXIT_LOSS);
-		}
-	}
+	} else if (new_state == TCP_CA_Loss && ca->pc_state)
+		exit_paced_chirping(sk);
 }
 
 static void dctcp_cwnd_event(struct sock *sk, enum tcp_ca_event ev)
