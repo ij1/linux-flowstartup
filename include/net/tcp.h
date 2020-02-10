@@ -1089,7 +1089,7 @@ struct tcp_congestion_ops {
 	 * and stack does not have a chirp description available.
 	 */
 	u32 (*new_chirp)(struct sock *sk);
-	
+
 	/* get info for inet_diag (optional) */
 	size_t (*get_info)(struct sock *sk, u32 ext, int *attr,
 			   union tcp_cc_info *info);
