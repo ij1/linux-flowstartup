@@ -387,9 +387,6 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	return 0;
 }
 
-
-
-
 static void dctcp_release(struct sock *sk)
 {
 	struct dctcp *ca = inet_csk_ca(sk);
