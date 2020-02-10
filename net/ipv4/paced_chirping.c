@@ -82,7 +82,6 @@ struct cc_chirp {
 
 	u32 qdelay[CHIRP_SIZE];
 	u64 scheduled_gaps[CHIRP_SIZE];
-	u64 last_arrival;
 };
 
 #define MEMORY_CACHE_SIZE_CHIRPS 10U
@@ -483,7 +482,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 	u32 rtt_us = sample->rtt_us;
 	int i;
 	u32 new_estimate;
-	u64 cur_time, diff;
 
 	if (!ca->pc_state || rtt_us == 0 || sample->pkts_acked == 0)
 		return;
@@ -497,10 +495,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 	}
 	if(!(cur_chirp = get_first_chirp(ca)))
 		return;
-
-	cur_time = ktime_to_ns(ktime_get_real());
-	diff = cur_time - cur_chirp->last_arrival;
-	diff = diff/sample->pkts_acked;
 
 	if (sample->pkts_acked)
 		cur_chirp->ack_cnt++;
@@ -529,7 +523,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 		}
 
 		if (cur_chirp->qdelay_index != cur_chirp->N) {
-			cur_chirp->last_arrival = cur_time;
 			/*Does not matter if we use minimum rtt for this chirp of for the duration of
 			 * the connection because the analysis uses relative queue delay in analysis.
 			 * Assumes no reordering or loss. Have to link seq number to array index. */
