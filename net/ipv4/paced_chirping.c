@@ -63,17 +63,9 @@
 #define G_G_SHIFT 10              /* Gain and geometry shift */
 #define CHIRP_SIZE 16U
 
-#define DEBUG 0
-#define DEBUG_PRINT(x) do { if (DEBUG) trace_printk x;} while (0)
-#define LOG 1
-#define LOG_PRINT(x) do { if (LOG) printk x;} while (0)
-
 #define EXIT_BOGUS 0
 #define EXIT_LOSS 1
 #define EXIT_TRANSITION 2
-/*Debug print functions located at bottom of file*/
-static void print_u32_array(u32 *array, u32 size, char *name, struct sock *sk);
-static void print_u64_array(u64 *array, u32 size, char *name, struct sock *sk);
 
 struct cc_chirp {
 	struct list_head list;
@@ -247,34 +239,6 @@ static void exit_paced_chirping(struct sock *sk, struct tcp_sock *tp, struct dct
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NEEDED, SK_PACING_NONE);
 	sk->sk_pacing_rate = ~0U;
 	ca->pc_state = 0;
-
-	DEBUG_PRINT(("port=%hu,exit=%u,gap=%u,cwnd=%u,min_rtt=%u,srtt=%u,round_length=%u,round_sent=%u,gain=%u,geometry=%u,cache=%lu\n",
-		     sk->sk_num,
-		     reason,
-		     ca->gap_avg_ns,
-		     tp->snd_cwnd,
-		     tcp_min_rtt(tp),
-		     tp->srtt_us >> 3,
-		     ca->round_length_us,
-		     ca->round_sent,
-		     (u32)ca->gain,
-		     (u32)ca->geometry,
-		     MEMORY_CACHE_SIZE_BYTES));
-	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,,exit=%u,gap=%u,cwnd=%u,min_rtt=%u,srtt=%u,round_length=%u,round_sent=%u,gain=%u,geometry=%u,cache=%lu\n",
-		   ntohl(sk->sk_rcv_saddr),
-		   ntohl(sk->sk_daddr),
-		   sk->sk_num,
-		   ntohs(sk->sk_dport),
-		   reason,
-		   ca->gap_avg_ns,
-		   tp->snd_cwnd,
-		   tcp_min_rtt(tp),
-		   tp->srtt_us >> 3,
-		   ca->round_length_us,
-		   ca->round_sent,
-		   (u32)ca->gain,
-		   (u32)ca->geometry,
-		   MEMORY_CACHE_SIZE_BYTES));
 }
 
 static inline void start_new_round(struct tcp_sock *tp, struct dctcp *ca)
@@ -284,11 +248,6 @@ static inline void start_new_round(struct tcp_sock *tp, struct dctcp *ca)
 
 	ca->round_start = ca->chirp_number;
 	ca->round_sent = ca->round_length_us = 0;
-	
-	DEBUG_PRINT(("port=%hu,new_round,start=%u,chirps=%u\n",
-		     tp->inet_conn.icsk_bind_hash->port,
-		     ca->round_start,
-		     ca->M>>M_SHIFT));
 }
 static u32 should_terminate(struct tcp_sock *tp, struct dctcp *ca)
 {
@@ -349,16 +308,8 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	u32 initial_gap_ns;
 	u32 chirp_length_ns;
 
-	if (!tp->is_chirping || !ca->chirp_list || ca->pc_state & STATE_TRANSITION || !(ca->pc_state & STATE_ACTIVE)) {
-		DEBUG_PRINT(("port=%hu,dctcp_new_chirp:Called unexpectedly\n",
-			     tp->inet_conn.icsk_bind_hash->port));
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,WARNING:unexpected_new_chirp_call\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport)));
+	if (!tp->is_chirping || !ca->chirp_list || ca->pc_state & STATE_TRANSITION || !(ca->pc_state & STATE_ACTIVE))
 		return 1;	
-	}
 
 	/* Save information */
 	if ((last_chirp = get_last_chirp(ca))) {
@@ -366,12 +317,6 @@ static u32 dctcp_new_chirp (struct sock *sk)
 			last_chirp->begin_seq = tp->chirp.begin_seq;
 			last_chirp->end_seq = tp->chirp.end_seq;
 			last_chirp->fully_sent = 1;
-
-			DEBUG_PRINT(("port=%hu,chirp%u,sent_at=%llu,out=%u\n",
-				     tp->inet_conn.icsk_bind_hash->port,
-				     last_chirp->chirp_number,
-				     tp->tcp_clock_cache,
-				     tp->chirp.packets_out));
 		}
 	}
 
@@ -379,54 +324,28 @@ static u32 dctcp_new_chirp (struct sock *sk)
 		N = 5;
 	else if (ca->chirp_number <= 3)
 		N = 8;
-	DEBUG_PRINT(("port=%hu,data_queued=%d,required=%lu,data_allocd=%u,e_committed=%u,e_data=%u,sent=%u,M=%u,out=%u\n",
-		     tp->inet_conn.icsk_bind_hash->port,
-		     sk->sk_wmem_queued,
-		     SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out),
-		     refcount_read(&sk->sk_wmem_alloc),
-		     enough_data_committed(sk, tp),
-		     enough_data_for_chirp(sk, tp, N),
-		     ca->round_sent,
-		     ca->M>>M_SHIFT,
-		     tp->packets_out));
 
 	/*Send marking packet*/
 	if (!(ca->pc_state & MARKING_PKT_SENT) && /* Not sent already */
 	    (cur_chirp = get_first_chirp(ca)) &&
 	    cur_chirp->chirp_number == 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
 	{
-		DEBUG_PRINT(("port=%hu,SENDING_MARK\n",
-			     tp->inet_conn.icsk_bind_hash->port));
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:SENDING_MARK\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport)));
 		ca->pc_state |= MARKING_PKT_SENT;
 		return 0;
 	}
 
 	/* Do not queue excessively in qDisc etc.*/
-	if (enough_data_committed(sk, tp)) {
-		DEBUG_PRINT(("port=%hu,Waiting for data to leave Qdisc\n",
-			     tp->inet_conn.icsk_bind_hash->port));
+	if (enough_data_committed(sk, tp))
 		return 1;
-	}
 
-	if (ca->round_sent >= (ca->M>>M_SHIFT)) {
-		DEBUG_PRINT(("port=%hu,halting chirping because round is scheduled\n",
-			     tp->inet_conn.icsk_bind_hash->port));
+	if (ca->round_sent >= (ca->M>>M_SHIFT))
 		return 1;
-	}
 	  
 	
 	/*TODO: Use TCP slow start as fallback.*/
 	/*Better to mark chirp as possible*/
-	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))  {
-		DEBUG_PRINT(("port=%hu,Not enough data for full chirp. Send immediately\n",
-			     tp->inet_conn.icsk_bind_hash->port));
+	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))
 		return 0;
-	}
 
 	if (!(new_chirp = cached_chirp_malloc(tp, ca))) {
 		trace_printk("port=%hu,ERROR_MALLOC\n",
@@ -463,25 +382,6 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	list_add_tail(&(new_chirp->list), &(ca->chirp_list->list));
 	tp->snd_cwnd += N;
 	
-	DEBUG_PRINT(("port=%hu,schedule_chirp=%u,at=%llu,N=%u,gap=%u,step=%u,guard=%u,cwnd=%u,length=%u,rtt=%u\n",
-		     tp->inet_conn.icsk_bind_hash->port,
-		     new_chirp->chirp_number,
-		     tp->tcp_clock_cache,
-		     tp->chirp.packets,
-		     tp->chirp.gap_ns,
-		     tp->chirp.gap_step_ns,
-		     tp->chirp.guard_interval_ns,
-		     tp->snd_cwnd,
-		     ca->round_length_us,
-		     tp->srtt_us>>3));
-
-	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:sched_chirp=%d\n",
-		   ntohl(sk->sk_rcv_saddr),
-		   ntohl(sk->sk_daddr),
-		   sk->sk_num,
-		   ntohs(sk->sk_dport),
-		   new_chirp->chirp_number));
-
 	return 0;
 }
 
@@ -632,21 +532,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 				start_new_round(tp, ca);
 				mark = 1;
 			}
-			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:outoforder,RECEIVED_MARK=%d\n",
-				   ntohl(sk->sk_rcv_saddr),
-				   ntohl(sk->sk_daddr),
-				   sk->sk_num,
-				   ntohs(sk->sk_dport),
-				   mark));
-			DEBUG_PRINT(("port=%hu,ignoring_ack for chirp %u,begin=%u,una=%u,end=%u,mark=%u\n",
-				     tp->inet_conn.icsk_bind_hash->port,
-				     cur_chirp->chirp_number,
-				     cur_chirp->begin_seq,
-				     tp->snd_una,
-				     cur_chirp->end_seq,
-				     mark));
-
-
 			continue;
 		}
 
@@ -674,23 +559,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 			
 			new_estimate = analyze_chirp(sk, cur_chirp);
 			update_gap_avg(tp, ca, new_estimate);
-			DEBUG_PRINT(("port=%hu,chirp_analysed=%u,estimate=%u,new_avg=%u\n",
-				     tp->inet_conn.icsk_bind_hash->port,
-				     cur_chirp->chirp_number,
-				     new_estimate,
-				     ca->gap_avg_ns));
-			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,chirp_num=%u,estimate=%u,new_avg=%u,pkts_out=%u,nxt_chirp=%u,min_rtt=%u,ack_cnt=%u\n",
-				   ntohl(sk->sk_rcv_saddr),
-				   ntohl(sk->sk_daddr),
-				   sk->sk_num,
-				   ntohs(sk->sk_dport),
-				   cur_chirp->chirp_number,
-				   new_estimate,
-				   ca->gap_avg_ns,
-				   tp->packets_out,
-				   ca->chirp_number,
-				   tcp_min_rtt(tp),
-				   cur_chirp->ack_cnt));
 			
 			/* Second round starts when the first chirp has been analyzed. */
 			if (cur_chirp->chirp_number == 0U) {
@@ -709,15 +577,6 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 				ca->round_sent = 0;
 				ca->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)ca->gap_avg_ns));
 				tp->snd_cwnd = max((u32)(ca->round_start<<1), 10U);
-				DEBUG_PRINT(("port=%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u\n",
-					     tp->inet_conn.icsk_bind_hash->port,
-					     ca->gap_avg_ns, tp->snd_cwnd, ca->round_start,rate));
-				LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u\n",
-					   ntohl(sk->sk_rcv_saddr),
-					   ntohl(sk->sk_daddr),
-					   sk->sk_num,
-					   ntohs(sk->sk_dport),
-					   ca->gap_avg_ns, tp->snd_cwnd, ca->round_start,rate));
 			
 				ca->pc_state |= STATE_TRANSITION;
 				tp->is_chirping = 0;
@@ -828,8 +687,6 @@ static void dctcp_init(struct sock *sk)
 	inet_csk(sk)->icsk_ca_ops = &dctcp_reno;
 	INET_ECN_dontxmit(sk);
 
-	DEBUG_PRINT(("port=%hu,Exiting:NO_ECN\n",
-		     sk->sk_num));
 	ca->pc_state = 0;
 	if (dctcp_pc_enabled)
 		init_paced_chirping(sk, tp, ca);
@@ -1014,89 +871,3 @@ MODULE_AUTHOR("Joakim Misund <joakimmi@ifi.uio.no>");
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DataCenter TCP (DCTCP)");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-static void print_u32_array(u32 *array, u32 size, char *name, struct sock *sk)
-{
-	char buf[1000];
-	char *ptr = buf;
-	int i;
-	
-	//ptr += snprintf(ptr, 1000, "port=%hu,%s:", tp->inet_conn.icsk_bind_hash->port, name);
-	ptr += snprintf(ptr, 1000, "%u-%u-%hu-%hu,%s:",
-			ntohl(sk->sk_rcv_saddr),
-			ntohl(sk->sk_daddr),
-			sk->sk_num,
-			ntohs(sk->sk_dport),
-			name);
-
-	for (i = 0; i < size; ++i) {
-		if (!ptr)
-			continue;
-
-		ptr += snprintf(ptr, 15, "%u,", array[i]); 
-	}
-	LOG_PRINT((KERN_INFO "[PC] %s\n", buf));
-	DEBUG_PRINT((buf));
-}
-static void print_u64_array(u64 *array, u32 size, char *name, struct sock *sk)
-{
-	char buf[1000];
-	char *ptr = buf;
-	int i;
-	
-	//ptr += snprintf(ptr, 1000, "port=%hu,%s:", tp->inet_conn.icsk_bind_hash->port, name);
-	ptr += snprintf(ptr, 1000, "%u-%u-%hu-%hu,%s:",
-			ntohl(sk->sk_rcv_saddr),
-			ntohl(sk->sk_daddr),
-			sk->sk_num,
-			ntohs(sk->sk_dport),
-			name);
-
-	for (i = 0; i < size; ++i) {
-		if (!ptr)
-			continue;
-
-		ptr += snprintf(ptr, 30, "%llu,", array[i]); 
-	}
-	LOG_PRINT((KERN_INFO "[PC] %s\n", buf));
-	DEBUG_PRINT((buf));
-}
