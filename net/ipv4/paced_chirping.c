@@ -63,10 +63,6 @@
 #define G_G_SHIFT 10              /* Gain and geometry shift */
 #define CHIRP_SIZE 16U
 
-#define EXIT_BOGUS 0
-#define EXIT_LOSS 1
-#define EXIT_TRANSITION 2
-
 struct cc_chirp {
 	struct list_head list;
 	u8 mem_flag;
