@@ -449,8 +449,8 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	}
 
 	/* Unterminated excursion */
-	if (cnt && (cnt+start) == N ) {
-		for (j = start; j < (start + cnt); ++j)
+	if (cnt && cnt + start == N) {
+		for (j = start; j < start + cnt; ++j)
 			E[j] = s[start];
 		l = start;
 	}
