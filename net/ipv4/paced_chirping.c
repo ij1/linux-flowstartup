@@ -407,7 +407,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u64 gap_avg = 0;
 	u32 *q = chirp->qdelay;
 	ktime_t *s;
-	u32 L = dctcp_pc_L;
 	u32 max_q = 0;
 	u32 start = 0, cnt = 0;	/* Excursion start index & len */
 	u32 E[CHIRP_SIZE];
@@ -435,7 +434,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				cnt++;
 			} else {
 				/* Excursion has ended or never started */
-				if (cnt >= L)
+				if (cnt >= dctcp_pc_L)
 					for (j = start; j < start + cnt; ++j)
 						if (q[j] < q[j+1])
 							E[j] = (uint32_t)s[j];
