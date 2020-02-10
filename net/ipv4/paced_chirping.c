@@ -107,7 +107,7 @@ struct dctcp {
 	u32 gap_avg_ns;      /* Average gap (estimate) */
 	u32 round_length_us; /* Used for termination condition */
 	u32 chirp_number;
-	u32 M;               /* Maximum number of chirps in a round */
+	u32 max_chirps;		/* Maximum number of chirps in a round */
 	u32 round_start;     /* Chirp number of the first chirp in the round */
 	u32 round_sent;      /* Number of chirps sent in the round */
 	u16 gain;            /* Increase of number of chirps */
@@ -240,8 +240,9 @@ static void exit_paced_chirping(struct sock *sk)
 
 static inline void start_new_round(struct tcp_sock *tp, struct dctcp *ca)
 {
-	if (ca->chirp_number >= 6 && ca->round_sent >= (ca->M>>M_SHIFT)) /* Next chirp to be sent */
-		ca->M = (ca->M * ca->gain)>>G_G_SHIFT;
+	/* Next chirps to be sent? */
+	if (ca->chirp_number >= 6 && ca->round_sent >= (ca->max_chirps >> M_SHIFT))
+		ca->max_chirps = (ca->max_chirps * ca->gain) >> G_G_SHIFT;
 
 	ca->round_start = ca->chirp_number;
 	ca->round_sent = ca->round_length_us = 0;
@@ -336,7 +337,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	if (enough_data_committed(sk, tp))
 		return 1;
 
-	if (ca->round_sent >= (ca->M>>M_SHIFT))
+	if (ca->round_sent >= (ca->max_chirps >> M_SHIFT))
 		return 1;
 
 	/* TODO: Use TCP slow start as fallback */
@@ -350,7 +351,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	gap_step_ns = switch_divide((((ca->geometry - (1<<G_G_SHIFT))<<1))*ca->gap_avg_ns, chirp_pkts, 1U) >> G_G_SHIFT;
 	initial_gap_ns = (ca->gap_avg_ns * ca->geometry)>>G_G_SHIFT;
 	chirp_length_ns = initial_gap_ns + (((chirp_pkts - 2) * ((initial_gap_ns<<1) - chirp_pkts * gap_step_ns + gap_step_ns))>>1);
-	guard_interval_ns = switch_divide((tp->srtt_us>>3), (ca->M>>M_SHIFT), 0) << 10;
+	guard_interval_ns = switch_divide((tp->srtt_us>>3), (ca->max_chirps >> M_SHIFT), 0) << 10;
 	guard_interval_ns = (guard_interval_ns > chirp_length_ns) ? max(ca->gap_avg_ns, guard_interval_ns - chirp_length_ns): ca->gap_avg_ns;
 
 	/* Provide the kernel with the pacing information */
@@ -598,7 +599,7 @@ static void init_paced_chirping(struct sock *sk, struct tcp_sock *tp,
 	ca->round_sent = 0;
 	ca->round_length_us = 0;
 
-	ca->M = (2<<M_SHIFT);
+	ca->max_chirps = (2 << M_SHIFT);
 	ca->gain = max(dctcp_pc_initial_gain, 1U << G_G_SHIFT);
 	ca->geometry = min(max(dctcp_pc_initial_geometry, 1U << G_G_SHIFT), 3U << G_G_SHIFT);
 
