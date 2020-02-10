@@ -215,10 +215,11 @@ static void cached_chirp_dealloc(struct tcp_sock *tp, struct cc_chirp *chirp)
 	}
 }
 
-static u32 gap_to_Bps_ns(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
+static u32 gap_ns_to_rate(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
 {
 	u64 rate;
-	if (!gap_ns) return 0;
+	if (!gap_ns)
+		return 0;
 	rate = tp->mss_cache;
 	rate *= NSEC_PER_SEC;
 	rate = rate/(u64)gap_ns;
@@ -545,7 +546,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 			cur_chirp = NULL;
 
 			if (should_terminate(tp, ca)) {
-				u32 rate = gap_to_Bps_ns(sk, tp, min(5000000U, ca->gap_avg_ns));
+				u32 rate = gap_ns_to_rate(sk, tp, min(5000000U, ca->gap_avg_ns));
 				sk->sk_pacing_rate = rate;
 
 				/*Send for one bdp*/
