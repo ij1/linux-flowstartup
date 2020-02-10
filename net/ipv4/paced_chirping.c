@@ -405,7 +405,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u32 N = chirp->qdelay_index;
 	int i, j, l = N-1;
 	u64 gap_avg = 0;
-	u32 *q = chirp->qdelay;
+	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
 	u32 max_q = 0;
 	u32 start = 0, cnt = 0;	/* Excursion start index & len */
@@ -427,7 +427,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		E[i] = 0;
 		if (cnt) {
 			/* Excursion continues? */
-			q_diff = (int)q[i] - (int)q[start];
+			q_diff = (int)qdelay[i] - (int)qdelay[start];
 			if (q_diff >= 0 &&
 			    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
 				max_q = max(max_q, (u32)q_diff);
@@ -436,7 +436,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				/* Excursion has ended or never started */
 				if (cnt >= dctcp_pc_L)
 					for (j = start; j < start + cnt; ++j)
-						if (q[j] < q[j+1])
+						if (qdelay[j] < qdelay[j+1])
 							E[j] = (uint32_t)s[j];
 
 				cnt = start = max_q = 0;
@@ -444,7 +444,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		}
 
 		/* Start new excursion */
-		if (!cnt && (i < (N-1)) && (q[i] < q[i+1])) {
+		if (!cnt && (i < (N-1)) && (qdelay[i] < qdelay[i+1])) {
 			start = i;
 			max_q = 0U;
 			cnt = 1;
