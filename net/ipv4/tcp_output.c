@@ -1048,9 +1048,9 @@ static void tcp_update_skb_after_send(struct sock *sk, struct sk_buff *skb,
 	if (sk->sk_pacing_status != SK_PACING_NONE) {
 		unsigned long rate = sk->sk_pacing_rate;
 
-		if (tp->is_chirping) {
-			if (tp->chirp.packets > tp->chirp.packets_out) {
-				struct chirp *chirp = &tp->chirp;
+		if (tp->chirp != NULL) {
+			struct chirp *chirp = tp->chirp;
+			if (chirp->packets > chirp->packets_out) {
 				u64 len_ns = chirp->gap_ns;
 				u64 credit = tp->tcp_wstamp_ns - prior_wstamp;
 
@@ -2487,8 +2487,8 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (tcp_pacing_check(sk))
 			break;
 
-		if (tp->is_chirping &&
-		    tp->chirp.packets <= tp->chirp.packets_out &&
+		if (tp->chirp != NULL &&
+		    tp->chirp->packets <= tp->chirp->packets_out &&
 		    inet_csk(sk)->icsk_ca_ops->new_chirp(sk)) {
 			break;
 		}
@@ -2523,7 +2523,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		}
 
 		limit = mss_now;
-		if (!tp->is_chirping && tso_segs > 1 && !tcp_urg_mode(tp))
+		if (tp->chirp != NULL && tso_segs > 1 && !tcp_urg_mode(tp))
 			limit = tcp_mss_split_point(sk, skb, mss_now,
 						    min_t(unsigned int,
 							  cwnd_quota,

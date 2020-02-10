@@ -417,11 +417,8 @@ void tcp_init_sock(struct sock *sk)
 	INIT_LIST_HEAD(&tp->tsq_node);
 	INIT_LIST_HEAD(&tp->tsorted_sent_queue);
 
-	tp->chirp.packets = tp->chirp.packets_out = 0;
-	tp->is_chirping = 0;
 	tp->disable_cwr_upon_ece = 0;
 	tp->disable_kernel_pacing_calculation = 0;
-	tp->chirp.scheduled_gaps = NULL;
 
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
 	tp->mdev_us = jiffies_to_usecs(TCP_TIMEOUT_INIT);
@@ -2674,7 +2671,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->rx_opt.dsack = 0;
 	tp->rx_opt.num_sacks = 0;
 	tp->rcv_ooopack = 0;
-
+	tp->chirp = NULL;
 
 	/* Clean up fastopen related fields */
 	tcp_free_fastopen_req(tp);

@@ -103,6 +103,8 @@ struct dctcp {
 	u32 ce_state;
 	u32 loss_cwnd;
 
+	struct chirp chirp;
+
 	/* Paced Chirping vars */
 	u8 pc_state;
 	struct cc_chirp *chirp_list;
@@ -231,7 +233,7 @@ static void exit_paced_chirping(struct sock *sk, struct tcp_sock *tp, struct dct
 		tp->snd_cwnd = max(tp->packets_out, 2U);
 		tp->snd_ssthresh = tp->snd_cwnd;
 	}
-	tp->is_chirping = 0;
+	tp->chirp = NULL;
 	tp->disable_cwr_upon_ece = 0;
 	tp->disable_kernel_pacing_calculation = 0;
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NEEDED, SK_PACING_NONE);
@@ -306,14 +308,15 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	u32 initial_gap_ns;
 	u32 chirp_length_ns;
 
-	if (!tp->is_chirping || !ca->chirp_list || ca->pc_state & STATE_TRANSITION || !(ca->pc_state & STATE_ACTIVE))
+	if ((tp->chirp == NULL) || !ca->chirp_list ||
+	    ca->pc_state & STATE_TRANSITION || !(ca->pc_state & STATE_ACTIVE))
 		return 1;
 
 	/* Save information */
 	if ((last_chirp = get_last_chirp(ca))) {
 		if (!last_chirp->fully_sent) {
-			last_chirp->begin_seq = tp->chirp.begin_seq;
-			last_chirp->end_seq = tp->chirp.end_seq;
+			last_chirp->begin_seq = ca->chirp.begin_seq;
+			last_chirp->end_seq = ca->chirp.end_seq;
 			last_chirp->fully_sent = 1;
 		}
 	}
@@ -357,12 +360,12 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	guard_interval_ns = (guard_interval_ns > chirp_length_ns) ? max(ca->gap_avg_ns, guard_interval_ns - chirp_length_ns): ca->gap_avg_ns;
 
 	/* Provide the kernel with the pacing information */
-	tp->chirp.packets = new_chirp->N = N;
-	tp->chirp.gap_ns = initial_gap_ns;
-	tp->chirp.gap_step_ns = gap_step_ns;
-	tp->chirp.guard_interval_ns = guard_interval_ns;
-	tp->chirp.scheduled_gaps = new_chirp->scheduled_gaps;
-	tp->chirp.packets_out = 0;
+	ca->chirp.packets = new_chirp->N = N;
+	ca->chirp.gap_ns = initial_gap_ns;
+	ca->chirp.gap_step_ns = gap_step_ns;
+	ca->chirp.guard_interval_ns = guard_interval_ns;
+	ca->chirp.scheduled_gaps = new_chirp->scheduled_gaps;
+	ca->chirp.packets_out = 0;
 
 	/* Save needed info */
 	new_chirp->chirp_number = ca->chirp_number++;
@@ -571,7 +574,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 				tp->snd_cwnd = max((u32)(ca->round_start<<1), 10U);
 
 				ca->pc_state |= STATE_TRANSITION;
-				tp->is_chirping = 0;
+				tp->chirp = NULL;
 			}
 		}
 	}
@@ -622,7 +625,7 @@ static void init_paced_chirping(struct sock *sk, struct tcp_sock *tp,
 	sk_pacing_shift_update(sk, 5);
 	tp->disable_kernel_pacing_calculation = 1;
 	tp->disable_cwr_upon_ece = 1;
-	tp->is_chirping = 1;
+	tp->chirp = &(ca->chirp);
 
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
 
