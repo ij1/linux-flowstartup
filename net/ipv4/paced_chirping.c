@@ -430,8 +430,8 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		/*Check if currently tracking a possible excursion*/
 		q_diff = (int)q[i] - (int)q[excursion_start];
 
-		if(excursion_cnt && q_diff >= 0 &&
-		   ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
+		if (excursion_cnt && q_diff >= 0 &&
+		    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
 			max_q = max(max_q, (u32)q_diff);
 			excursion_cnt++;
 		} else { /*Excursion has ended or never started.*/
@@ -496,7 +496,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 			exit_paced_chirping(sk);
 		return;
 	}
-	if(!(cur_chirp = get_first_chirp(ca)))
+	if ((cur_chirp = get_first_chirp(ca)) == NULL)
 		return;
 
 	if (sample->pkts_acked)
