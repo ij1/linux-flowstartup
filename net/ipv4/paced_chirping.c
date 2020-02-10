@@ -72,7 +72,7 @@ struct cc_chirp {
 	u8 mem_flag;
 
 	u16 chirp_number;
-	u16 N;
+	u16 chirp_pkts;
 	u16 qdelay_index;
 	u16 ack_cnt;
 
@@ -286,9 +286,9 @@ static void update_gap_avg(struct tcp_sock *tp, struct dctcp *ca, u32 new_estima
 		(new_estimate_ns>>GAP_AVG_SHIFT);
 }
 
-static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
+static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int chirp_pkts)
 {
-	return SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
+	return SKB_TRUESIZE(tp->mss_cache) * (chirp_pkts + tp->packets_out) <= sk->sk_wmem_queued;
 }
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
 {
@@ -303,7 +303,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	struct cc_chirp *new_chirp;
 	struct cc_chirp *last_chirp;
 	struct cc_chirp *cur_chirp;
-	u32 N = CHIRP_SIZE;
+	u32 chirp_pkts = CHIRP_SIZE;
 	u32 guard_interval_ns;
 	u32 gap_step_ns;
 	u32 initial_gap_ns;
@@ -323,9 +323,9 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	}
 
 	if (ca->chirp_number <= 1)
-		N = 5;
+		chirp_pkts = 5;
 	else if (ca->chirp_number <= 3)
-		N = 8;
+		chirp_pkts = 8;
 
 	/* Send marking packet */
 	if (!(ca->pc_state & MARKING_PKT_SENT) && /* Not sent already */
@@ -345,20 +345,20 @@ static u32 dctcp_new_chirp (struct sock *sk)
 
 	/* TODO: Use TCP slow start as fallback */
 	/* Better to mark chirp as possible */
-	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))
+	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, chirp_pkts))
 		return 0;
 
 	if (!(new_chirp = cached_chirp_malloc(tp, ca)))
 		return 0;
 
-	gap_step_ns = switch_divide((((ca->geometry - (1<<G_G_SHIFT))<<1))*ca->gap_avg_ns , N, 1U) >> G_G_SHIFT;
+	gap_step_ns = switch_divide((((ca->geometry - (1<<G_G_SHIFT))<<1))*ca->gap_avg_ns, chirp_pkts, 1U) >> G_G_SHIFT;
 	initial_gap_ns = (ca->gap_avg_ns * ca->geometry)>>G_G_SHIFT;
-	chirp_length_ns = initial_gap_ns + (((N-2) * ((initial_gap_ns<<1) - N*gap_step_ns + gap_step_ns))>>1);
+	chirp_length_ns = initial_gap_ns + (((chirp_pkts - 2) * ((initial_gap_ns<<1) - chirp_pkts * gap_step_ns + gap_step_ns))>>1);
 	guard_interval_ns = switch_divide((tp->srtt_us>>3), (ca->M>>M_SHIFT), 0) << 10;
 	guard_interval_ns = (guard_interval_ns > chirp_length_ns) ? max(ca->gap_avg_ns, guard_interval_ns - chirp_length_ns): ca->gap_avg_ns;
 
 	/* Provide the kernel with the pacing information */
-	ca->chirp.packets = new_chirp->N = N;
+	ca->chirp.packets = new_chirp->chirp_pkts = chirp_pkts;
 	ca->chirp.gap_ns = initial_gap_ns;
 	ca->chirp.gap_step_ns = gap_step_ns;
 	ca->chirp.guard_interval_ns = guard_interval_ns;
@@ -376,7 +376,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	ca->round_length_us += chirp_length_ns>>10;
 
 	list_add_tail(&(new_chirp->list), &(ca->chirp_list->list));
-	tp->snd_cwnd += N;
+	tp->snd_cwnd += chirp_pkts;
 
 	return 0;
 }
@@ -402,9 +402,9 @@ static void dctcp_release(struct sock *sk)
 
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
-	u32 N = chirp->qdelay_index;
+	u32 chirp_pkts = chirp->qdelay_index;
 	int i, j;
-	int last_sample = N - 1;
+	int last_sample = chirp_pkts - 1;
 	u64 gap_avg = 0;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
@@ -414,11 +414,12 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 	s = chirp->scheduled_gaps;
 
-	if (chirp->ack_cnt < N >> 1)	/* Ack aggregation is too great? */
+	/* Ack aggregation is too great? */
+	if (chirp->ack_cnt < chirp_pkts >> 1)
 		return INVALID_CHIRP;
 
-	for (i = 1; i < N; ++i) {
-		if ((i < N - 1) && ((s[i] << 1) < s[i+1]))
+	for (i = 1; i < chirp_pkts; ++i) {
+		if ((i < chirp_pkts - 1) && ((s[i] << 1) < s[i+1]))
 			return INVALID_CHIRP;
 		E[i] = 0;
 		if (cnt) {
@@ -439,7 +440,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		}
 
 		/* Start new excursion */
-		if (!cnt && (i < N - 1) && (qdelay[i] < qdelay[i + 1])) {
+		if (!cnt && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
 			start = i;
 			max_q = 0;
 			cnt = 1;
@@ -447,18 +448,18 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	}
 
 	/* Unterminated excursion */
-	if (cnt && cnt + start == N)
+	if (cnt && cnt + start == chirp_pkts)
 		last_sample = start;
 
 	/* Calculate the average gap */
-	for (i = 1; i < N; ++i) {
+	for (i = 1; i < chirp_pkts; ++i) {
 		if ((E[i] == 0) || (cnt && i >= start))
 			gap_avg += s[last_sample];
 		else
 			gap_avg += E[i];
 	}
 
-	gap_avg = gap_avg / (N - 1);
+	gap_avg = gap_avg / (chirp_pkts - 1);
 	if (gap_avg > U32_MAX)
 		gap_avg = INVALID_CHIRP;
 	return gap_avg;
@@ -511,7 +512,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 			start_new_round(tp, ca);
 		}
 
-		if (cur_chirp->qdelay_index != cur_chirp->N) {
+		if (cur_chirp->qdelay_index != cur_chirp->chirp_pkts) {
 			/* Does not matter if we use minimum rtt for this chirp of for the duration of
 			 * the connection because the analysis uses relative queue delay in analysis.
 			 * Assumes no reordering or loss. Have to link seq number to array index. */
@@ -519,7 +520,7 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 		}
 
 		/* Chirp is completed */
-		if (cur_chirp->qdelay_index >= cur_chirp->N &&
+		if (cur_chirp->qdelay_index >= cur_chirp->chirp_pkts &&
 		    (cur_chirp->fully_sent && !after(cur_chirp->end_seq, tp->snd_una))) {
 			new_estimate = analyze_chirp(sk, cur_chirp);
 			update_gap_avg(tp, ca, new_estimate);
