@@ -426,21 +426,22 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		if (i < (N-1) && (s[i]<<1) < s[i+1])
 			return INVALID_CHIRP;
 		E[i] = 0;
-		/* Check if currently tracking a possible excursion */
-		q_diff = (int)q[i] - (int)q[start];
+		if (cnt) {
+			/* Excursion continues? */
+			q_diff = (int)q[i] - (int)q[start];
+			if (q_diff >= 0 &&
+			    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
+				max_q = max(max_q, (u32)q_diff);
+				cnt++;
+			} else {
+				/* Excursion has ended or never started */
+				if (cnt >= L)
+					for (j = start; j < start + cnt; ++j)
+						if (q[j] < q[j+1])
+							E[j] = (uint32_t)s[j];
 
-		if (cnt && q_diff >= 0 &&
-		    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
-			max_q = max(max_q, (u32)q_diff);
-			cnt++;
-		} else {
-			/* Excursion has ended or never started */
-			if (cnt >= L)
-				for (j = start; j < start + cnt; ++j)
-					if (q[j] < q[j+1])
-						E[j] = (uint32_t)s[j];
-
-			cnt = start = max_q = 0;
+				cnt = start = max_q = 0;
+			}
 		}
 
 		/* Start new excursion */
