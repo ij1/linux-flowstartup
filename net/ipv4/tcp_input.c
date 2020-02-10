@@ -5266,12 +5266,8 @@ send_now:
 	}
 
 	if (!ofo_possible || RB_EMPTY_ROOT(&tp->out_of_order_queue)) {
-		if (sock_net(sk)->ipv4.sysctl_tcp_delayed_acks) {
-			tcp_send_delayed_ack(sk);
-			return;
-		}
-		/* Delayed acks disabled */
-		goto send_now;
+		tcp_send_delayed_ack(sk);
+		return;
 	}
 
 	if (!tcp_is_sack(tp) ||
