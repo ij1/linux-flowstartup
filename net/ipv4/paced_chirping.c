@@ -419,8 +419,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		return INVALID_CHIRP;
 
 	for (i = 1; i < N; ++i) {
-
-		if (i < (N-1) && (s[i]<<1) < s[i+1])
+		if ((i < N - 1) && ((s[i] << 1) < s[i+1]))
 			return INVALID_CHIRP;
 		E[i] = 0;
 		if (cnt) {
@@ -433,7 +432,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				/* Excursion has ended or never started */
 				if (cnt >= dctcp_pc_L)
 					for (j = start; j < start + cnt; ++j)
-						if (qdelay[j] < qdelay[j+1])
+						if (qdelay[j] < qdelay[j + 1])
 							E[j] = s[j];
 
 				cnt = start = max_q = 0;
@@ -441,7 +440,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		}
 
 		/* Start new excursion */
-		if (!cnt && (i < (N-1)) && (qdelay[i] < qdelay[i+1])) {
+		if (!cnt && (i < N - 1) && (qdelay[i] < qdelay[i + 1])) {
 			start = i;
 			max_q = 0;
 			cnt = 1;
@@ -463,7 +462,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			gap_avg += E[i];
 	}
 
-	gap_avg = gap_avg/(N-1);
+	gap_avg = gap_avg / (N - 1);
 	if (gap_avg > U32_MAX)
 		gap_avg = INVALID_CHIRP;
 	return gap_avg;
