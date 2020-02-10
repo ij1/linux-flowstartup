@@ -155,7 +155,7 @@ static struct tcp_congestion_ops dctcp_reno;
 
 static uint32_t switch_divide(u32 value, u32 by, bool round_up)
 {
-	switch(by) {
+	switch (by) {
 	case 1:
 		return value;
 	case 2:
@@ -172,11 +172,10 @@ static uint32_t switch_divide(u32 value, u32 by, bool round_up)
 		trace_printk("Divide by zero!\n");
 		return value;
 	}
-	if (round_up) {
+	if (round_up)
 		return DIV_ROUND_UP(value, by);
-	} else {
-		return value/by;
-	}
+	else
+		return value / by;
 }
 
 static struct cc_chirp* cached_chirp_malloc(struct tcp_sock *tp, struct dctcp *ca)
