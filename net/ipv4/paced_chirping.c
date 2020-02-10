@@ -434,7 +434,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				if (cnt >= dctcp_pc_L)
 					for (j = start; j < start + cnt; ++j)
 						if (qdelay[j] < qdelay[j+1])
-							E[j] = (uint32_t)s[j];
+							E[j] = s[j];
 
 				cnt = start = max_q = 0;
 			}
@@ -451,14 +451,14 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	/* Unterminated excursion */
 	if (cnt && (cnt+start) == N ) {
 		for (j = start; j < (start + cnt); ++j)
-			E[j] = (uint32_t)s[start];
+			E[j] = s[start];
 		l = start;
 	}
 
 	/* Calculate the average gap */
 	for (i = 1; i < N; ++i) {
 		if (E[i] == 0)
-			gap_avg += (uint32_t)s[l];
+			gap_avg += s[l];
 		else
 			gap_avg += E[i];
 	}
