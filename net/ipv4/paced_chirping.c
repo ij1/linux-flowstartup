@@ -153,7 +153,7 @@ MODULE_PARM_DESC(dctcp_pc_L, "Number of packets that make up an excursion");
 
 static struct tcp_congestion_ops dctcp_reno;
 
-static uint32_t switch_divide(uint32_t value, uint32_t by, u8 round_up)
+static uint32_t switch_divide(u32 value, u32 by, bool round_up)
 {
 	switch(by) {
 	case 1:
@@ -350,14 +350,16 @@ static u32 dctcp_new_chirp (struct sock *sk)
 
 	gap_step_ns = switch_divide((((ca->geometry - (1 << G_G_SHIFT)) << 1)) *
 	                            ca->gap_avg_ns,
-				    chirp_pkts, 1) >> G_G_SHIFT;
+				    chirp_pkts,
+				    true) >> G_G_SHIFT;
 	initial_gap_ns = (ca->gap_avg_ns * ca->geometry) >> G_G_SHIFT;
 	chirp_length_ns = initial_gap_ns +
 	                  (((chirp_pkts - 2) *
 	                    ((initial_gap_ns << 1) -
 	                     chirp_pkts * gap_step_ns + gap_step_ns)) >> 1);
 	guard_interval_ns = switch_divide(tp->srtt_us >> 3,
-					  ca->max_chirps >> M_SHIFT, 0) << 10;
+					  ca->max_chirps >> M_SHIFT,
+					  false) << 10;
 	guard_interval_ns = guard_interval_ns > chirp_length_ns ?
 			    max(ca->gap_avg_ns,
 			        guard_interval_ns - chirp_length_ns) :
