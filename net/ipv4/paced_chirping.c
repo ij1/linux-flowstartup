@@ -347,11 +347,8 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	if (ca->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))
 		return 0;
 
-	if (!(new_chirp = cached_chirp_malloc(tp, ca))) {
-		trace_printk("port=%hu,ERROR_MALLOC\n",
-			     tp->inet_conn.icsk_bind_hash->port);
+	if (!(new_chirp = cached_chirp_malloc(tp, ca)))
 		return 0;
-	}
 
 	gap_step_ns = switch_divide((((ca->geometry - (1<<G_G_SHIFT))<<1))*ca->gap_avg_ns , N, 1U) >> G_G_SHIFT;
 	initial_gap_ns = (ca->gap_avg_ns * ca->geometry)>>G_G_SHIFT;
