@@ -104,14 +104,14 @@ struct dctcp {
 	u8 pc_state;
 	struct cc_chirp *chirp_list;
 
-	u32 gap_avg_ns;      /* Average gap (estimate) */
-	u32 round_length_us; /* Used for termination condition */
+	u32 gap_avg_ns;		/* Average gap (estimate) */
+	u32 round_length_us;	/* Used for termination condition */
 	u32 chirp_number;
 	u32 max_chirps;		/* Maximum number of chirps in a round */
-	u32 round_start;     /* Chirp number of the first chirp in the round */
-	u32 round_sent;      /* Number of chirps sent in the round */
-	u16 gain;            /* Increase of number of chirps */
-	u16 geometry;        /* Range to probe for */
+	u32 round_start;	/* Chirp number of the first chirp in the round */
+	u32 round_sent;		/* Number of chirps sent in the round */
+	u16 gain;		/* Increase of number of chirps */
+	u16 geometry;		/* Range to probe for */
 
 	/* Memory caching */
 	u16 cache_index;
