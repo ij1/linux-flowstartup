@@ -409,8 +409,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	ktime_t *s;
 	u32 L = dctcp_pc_L;
 	u32 max_q = 0;
-	u32 excursion_cnt = 0;
-	u32 excursion_start = 0;
+	u32 start = 0, cnt = 0;	/* Excursion start index & len */
 	u32 E[CHIRP_SIZE];
 
 	int q_diff = 0;
@@ -428,41 +427,35 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			return INVALID_CHIRP;
 		E[i] = 0;
 		/* Check if currently tracking a possible excursion */
-		q_diff = (int)q[i] - (int)q[excursion_start];
+		q_diff = (int)q[i] - (int)q[start];
 
-		if (excursion_cnt && q_diff >= 0 &&
+		if (cnt && q_diff >= 0 &&
 		    ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
 			max_q = max(max_q, (u32)q_diff);
-			excursion_cnt++;
+			cnt++;
 		} else {
 			/* Excursion has ended or never started */
-			if (excursion_cnt >= L) {
-				for (j = excursion_start;
-				     j < excursion_start + excursion_cnt;
-				     ++j) {
+			if (cnt >= L)
+				for (j = start; j < start + cnt; ++j)
 					if (q[j] < q[j+1])
 						E[j] = (uint32_t)s[j];
-				}
-			}
-			excursion_cnt = excursion_start = max_q = 0;
+
+			cnt = start = max_q = 0;
 		}
 
 		/* Start new excursion */
-		if (!excursion_cnt && (i < (N-1)) && (q[i] < q[i+1])) {
-			excursion_start = i;
+		if (!cnt && (i < (N-1)) && (q[i] < q[i+1])) {
+			start = i;
 			max_q = 0U;
-			excursion_cnt = 1;
+			cnt = 1;
 		}
 	}
 
 	/* Unterminated excursion */
-	if (excursion_cnt && (excursion_cnt+excursion_start) == N ) {
-		for (j = excursion_start;
-		     j < (excursion_start + excursion_cnt);
-		     ++j) {
-			E[j] = (uint32_t)s[excursion_start];
-		}
-		l = excursion_start;
+	if (cnt && (cnt+start) == N ) {
+		for (j = start; j < (start + cnt); ++j)
+			E[j] = (uint32_t)s[start];
+		l = start;
 	}
 
 	/* Calculate the average gap */
