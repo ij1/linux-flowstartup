@@ -1047,15 +1047,45 @@ static void tcp_update_skb_after_send(struct sock *sk, struct sk_buff *skb,
 
 	if (sk->sk_pacing_status != SK_PACING_NONE) {
 		unsigned long rate = sk->sk_pacing_rate;
+		
+		if (tp->is_chirping) {
+			if (tp->chirp.packets > tp->chirp.packets_out) {
+			
+				struct chirp *chirp = &tp->chirp;
+				u64 len_ns = chirp->gap_ns;
+				u64 credit = tp->tcp_wstamp_ns - prior_wstamp;
 
+				chirp->gap_ns = (chirp->gap_step_ns > chirp->gap_ns) ?
+					0 : chirp->gap_ns - chirp->gap_step_ns;
+				chirp->packets_out++;
+
+				if (chirp->packets_out == 1U) {
+					chirp->begin_seq = tp->snd_nxt;
+					credit = 0;
+				}
+				
+				if (chirp->packets_out == chirp->packets) {
+					tp->tcp_wstamp_ns += chirp->guard_interval_ns; /*Don't care about credits here*/
+					chirp->end_seq = tp->snd_nxt + skb->len;
+					inet_csk(sk)->icsk_ca_ops->new_chirp(sk);
+				} else {
+					/* take into account OS jitter */
+					len_ns -= min_t(u64, len_ns / 2, credit);
+					tp->tcp_wstamp_ns += len_ns;
+					if (chirp->scheduled_gaps) {
+						chirp->scheduled_gaps[chirp->packets_out] = credit + len_ns;
+					}
+				}
+			}
+		}
 		/* Original sch_fq does not pace first 10 MSS
 		 * Note that tp->data_segs_out overflows after 2^32 packets,
 		 * this is a minor annoyance.
 		 */
-		if (rate != ~0UL && rate && tp->data_segs_out >= 10) {
+		else if (rate != ~0UL && rate && tp->data_segs_out >= 10) {
 			u64 len_ns = div64_ul((u64)skb->len * NSEC_PER_SEC, rate);
 			u64 credit = tp->tcp_wstamp_ns - prior_wstamp;
-
+				
 			/* take into account OS jitter */
 			len_ns -= min_t(u64, len_ns / 2, credit);
 			tp->tcp_wstamp_ns += len_ns;
@@ -2458,6 +2488,12 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (tcp_pacing_check(sk))
 			break;
 
+		if (tp->is_chirping &&
+		    tp->chirp.packets <= tp->chirp.packets_out &&
+		    inet_csk(sk)->icsk_ca_ops->new_chirp(sk)) {
+			break;
+		}
+
 		tso_segs = tcp_init_tso_segs(skb, mss_now);
 		BUG_ON(!tso_segs);
 
@@ -2488,7 +2524,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		}
 
 		limit = mss_now;
-		if (tso_segs > 1 && !tcp_urg_mode(tp))
+		if (!tp->is_chirping && tso_segs > 1 && !tcp_urg_mode(tp))
 			limit = tcp_mss_split_point(sk, skb, mss_now,
 						    min_t(unsigned int,
 							  cwnd_quota,

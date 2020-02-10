@@ -165,6 +165,17 @@ static inline struct tcp_request_sock *tcp_rsk(const struct request_sock *req)
 	return (struct tcp_request_sock *)req;
 }
 
+struct chirp {
+	u16 packets;
+	u16 packets_out;
+	u32 gap_ns;
+	u32 gap_step_ns;
+	u32 guard_interval_ns;
+	u32 begin_seq;
+	u32 end_seq;
+	u64 *scheduled_gaps;
+};
+
 struct tcp_sock {
 	/* inet_connection_sock has to be the first member of tcp_sock */
 	struct inet_connection_sock	inet_conn;
@@ -331,6 +342,13 @@ struct tcp_sock {
 
 	struct hrtimer	pacing_timer;
 	struct hrtimer	compressed_ack_timer;
+
+	
+	u32 is_chirping;
+	struct chirp chirp;
+	u32 disable_cwr_upon_ece;
+	u32 disable_kernel_pacing_calculation;
+	
 
 	/* from STCP, retrans queue hinting */
 	struct sk_buff* lost_skb_hint;
