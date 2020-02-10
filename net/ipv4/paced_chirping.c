@@ -348,11 +348,20 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	if (!(new_chirp = cached_chirp_malloc(tp, ca)))
 		return 0;
 
-	gap_step_ns = switch_divide((((ca->geometry - (1<<G_G_SHIFT))<<1))*ca->gap_avg_ns, chirp_pkts, 1U) >> G_G_SHIFT;
-	initial_gap_ns = (ca->gap_avg_ns * ca->geometry)>>G_G_SHIFT;
-	chirp_length_ns = initial_gap_ns + (((chirp_pkts - 2) * ((initial_gap_ns<<1) - chirp_pkts * gap_step_ns + gap_step_ns))>>1);
-	guard_interval_ns = switch_divide((tp->srtt_us>>3), (ca->max_chirps >> M_SHIFT), 0) << 10;
-	guard_interval_ns = (guard_interval_ns > chirp_length_ns) ? max(ca->gap_avg_ns, guard_interval_ns - chirp_length_ns): ca->gap_avg_ns;
+	gap_step_ns = switch_divide((((ca->geometry - (1 << G_G_SHIFT)) << 1)) *
+	                            ca->gap_avg_ns,
+				    chirp_pkts, 1) >> G_G_SHIFT;
+	initial_gap_ns = (ca->gap_avg_ns * ca->geometry) >> G_G_SHIFT;
+	chirp_length_ns = initial_gap_ns +
+	                  (((chirp_pkts - 2) *
+	                    ((initial_gap_ns << 1) -
+	                     chirp_pkts * gap_step_ns + gap_step_ns)) >> 1);
+	guard_interval_ns = switch_divide(tp->srtt_us >> 3,
+					  ca->max_chirps >> M_SHIFT, 0) << 10;
+	guard_interval_ns = guard_interval_ns > chirp_length_ns ?
+			    max(ca->gap_avg_ns,
+			        guard_interval_ns - chirp_length_ns) :
+			    ca->gap_avg_ns;
 
 	/* Provide the kernel with the pacing information */
 	ca->chirp.packets = new_chirp->chirp_pkts = chirp_pkts;
