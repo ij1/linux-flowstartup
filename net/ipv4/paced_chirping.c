@@ -449,15 +449,12 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	}
 
 	/* Unterminated excursion */
-	if (cnt && cnt + start == N) {
-		for (j = start; j < start + cnt; ++j)
-			E[j] = s[start];
+	if (cnt && cnt + start == N)
 		last_sample = start;
-	}
 
 	/* Calculate the average gap */
 	for (i = 1; i < N; ++i) {
-		if (E[i] == 0)
+		if ((E[i] == 0) || (cnt && i >= start))
 			gap_avg += s[last_sample];
 		else
 			gap_avg += E[i];
