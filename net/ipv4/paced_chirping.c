@@ -419,10 +419,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 	s = chirp->scheduled_gaps;
 
-	print_u64_array((u64*)s, N, "gaps", sk);
-	print_u32_array(q, N, "queue", sk);
-	print_u64_array(chirp->inter_arrival_times, N, "interarr", sk);
-
 	if (N < 2)
 		return INVALID_CHIRP;
 	if (chirp->ack_cnt < N>>1) /* Ack aggregation is too great*/
@@ -477,7 +473,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		else
 			gap_avg += E[i];
 	}
-	print_u32_array(E, N, "E", sk);
 
 	gap_avg = gap_avg/(N-1);
 	if (gap_avg > U32_MAX)
