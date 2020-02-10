@@ -490,8 +490,6 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	INIT_LIST_HEAD(&newtp->tsq_node);
 	INIT_LIST_HEAD(&newtp->tsorted_sent_queue);
 
-	newtp->disable_cwr_upon_ece = 0;
-
 	tcp_init_wl(newtp, treq->rcv_isn);
 
 	minmax_reset(&newtp->rtt_min, tcp_jiffies32, ~0U);

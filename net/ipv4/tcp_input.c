@@ -3674,8 +3674,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 							&sack_state);
 
 		if (tcp_ecn_rcv_ecn_echo(tp, tcp_hdr(skb))) {
-			if (likely(!tp->disable_cwr_upon_ece))
-				flag |= FLAG_ECE;
+			flag |= FLAG_ECE;
 			ack_ev_flags |= CA_ACK_ECE;
 		}
 

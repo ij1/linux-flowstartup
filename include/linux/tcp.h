@@ -344,7 +344,6 @@ struct tcp_sock {
 	struct hrtimer	compressed_ack_timer;
 
 	struct chirp *chirp;
-	u32 disable_cwr_upon_ece;
 
 	/* from STCP, retrans queue hinting */
 	struct sk_buff* lost_skb_hint;
