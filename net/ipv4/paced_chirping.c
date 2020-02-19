@@ -406,22 +406,23 @@ static void dctcp_release(struct sock *sk)
 
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
-	u8 chirp_pkts = chirp->qdelay_index;
 	int i;
 	int last_sample;
-	u64 gap_total = 0;
-	u64 gap_pending = 0;
 	u64 gap_avg;
 	u64 last_delay;
 	u64 last_gap;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
+
+	u64 gap_total = 0;
+	u64 gap_pending = 0;
 	s32 max_q = 0;
-	bool in_excursion = false;
 	u32 excursion_start;
+	u8 chirp_pkts = chirp->qdelay_index;
 	u8 excursion_len = 0;
 	u8 uncounted = 0;
 	u8 pending_count = 0;
+	bool in_excursion = false;
 
 	s = chirp->scheduled_gaps;
 
