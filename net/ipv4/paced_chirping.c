@@ -438,6 +438,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		if (!in_excursion && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
 			excursion_start = i;
 			excursion_len = 0;
+			last_sample = excursion_start;
 			max_q = 0;
 
 			in_excursion = true;
@@ -467,8 +468,8 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	}
 
 	/* Unterminated excursion */
-	if (in_excursion)
-		last_sample = excursion_start;
+	if (!in_excursion)
+		last_sample = chirp_pkts - 1;
 
 	/* Calculate the average gap */
 	gap_total += uncounted * s[last_sample];
