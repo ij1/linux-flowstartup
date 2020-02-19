@@ -408,8 +408,8 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
 	int i;
 	u64 gap_avg;
-	u64 last_delay;
 	u64 last_gap;
+	u32 last_delay;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
 
