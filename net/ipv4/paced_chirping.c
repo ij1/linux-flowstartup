@@ -415,11 +415,11 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
 	s32 max_q = 0;
-	u32 excursion_start = 0;
-	int excursion_len = 0;
 	bool in_excursion = false;
-	int uncounted = 0;
-	int pending_count = 0;
+	u8 excursion_start = 0;
+	u8 excursion_len = 0;
+	u8 uncounted = 0;
+	u8 pending_count = 0;
 
 	s = chirp->scheduled_gaps;
 
