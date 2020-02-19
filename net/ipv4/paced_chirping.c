@@ -420,7 +420,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	bool in_excursion = false;
 	int uncounted = 0;
 	int pending_count = 0;
-	u32 E[CHIRP_SIZE];
 
 	s = chirp->scheduled_gaps;
 
@@ -431,7 +430,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	for (i = 1; i < chirp_pkts; ++i) {
 		if ((i < chirp_pkts - 1) && ((s[i] << 1) < s[i+1]))
 			return INVALID_CHIRP;
-		E[i] = 0;
+
 		uncounted++;
 
 		/* Start new excursion */
