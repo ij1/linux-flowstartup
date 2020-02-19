@@ -406,7 +406,7 @@ static void dctcp_release(struct sock *sk)
 
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
-	u32 chirp_pkts = chirp->qdelay_index;
+	u8 chirp_pkts = chirp->qdelay_index;
 	int i;
 	int last_sample;
 	u64 gap_total = 0;
