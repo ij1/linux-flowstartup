@@ -418,7 +418,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	ktime_t *s;
 	s32 max_q = 0;
 	bool in_excursion = false;
-	u8 excursion_start = 0;
+	u32 excursion_start;
 	u8 excursion_len = 0;
 	u8 uncounted = 0;
 	u8 pending_count = 0;
@@ -439,7 +439,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 		/* Start new excursion */
 		if (!in_excursion && (i < chirp_pkts) && (last_delay < qdelay[i])) {
-			excursion_start = i - 1;
+			excursion_start = last_delay;
 			excursion_len = 0;
 			last_sample = excursion_start;
 			max_q = 0;
@@ -448,7 +448,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		}
 		if (in_excursion) {
 			/* Excursion continues? */
-			s32 q_diff = (s32)(last_delay - qdelay[excursion_start]);
+			s32 q_diff = (s32)(last_delay - excursion_start);
 			if (q_diff >= (max_q >> 1) + (max_q >> 3)) {
 				max_q = max(max_q, q_diff);
 				excursion_len++;
