@@ -407,7 +407,7 @@ static void dctcp_release(struct sock *sk)
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
 	u32 chirp_pkts = chirp->qdelay_index;
-	int i, j;
+	int i;
 	int last_sample = chirp_pkts - 1;
 	u64 gap_total = 0;
 	u64 gap_pending = 0;
@@ -416,6 +416,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	ktime_t *s;
 	s32 max_q = 0;
 	u32 start = 0, cnt = 0;	/* Excursion start index & len */
+	bool in_excursion = false;
 	int uncounted = 0;
 	int pending_count = 0;
 	u32 E[CHIRP_SIZE];
@@ -433,12 +434,14 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		uncounted++;
 
 		/* Start new excursion */
-		if (!cnt && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
+		if (!in_excursion && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
 			start = i;
+			in_excursion = true;
+			cnt = 0;
 			max_q = 0;
 			gap_pending = 0;
 		}
-		if (cnt) {
+		if (in_excursion) {
 			/* Excursion continues? */
 			s32 q_diff = (s32)(qdelay[i] - qdelay[start]);
 			if (q_diff >= (max_q >> 1) + (max_q >> 3)) {
@@ -455,15 +458,15 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 					uncounted -= pending_count;
 				}
 
-				cnt = start = max_q = 0;
 				gap_pending = 0;
 				pending_count = 0;
+				in_excursion = false;
 			}
 		}
 	}
 
 	/* Unterminated excursion */
-	if (cnt && cnt + start == chirp_pkts)
+	if (in_excursion)
 		last_sample = start;
 
 	/* Calculate the average gap */
