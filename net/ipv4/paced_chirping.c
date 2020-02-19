@@ -448,6 +448,10 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			if (q_diff >= (max_q >> 1) + (max_q >> 3)) {
 				max_q = max(max_q, q_diff);
 				excursion_len++;
+
+				if (i == chirp_pkts - 1)
+					break;
+
 				if (qdelay[i] < qdelay[i + 1]) {
 					gap_pending += s[i];
 					pending_count++;
