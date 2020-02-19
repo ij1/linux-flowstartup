@@ -479,10 +479,10 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 
 	/* Unterminated excursion */
 	if (!in_excursion)
-		last_sample = chirp_pkts - 1;
+		last_sample = last_gap;
 
 	/* Calculate the average gap */
-	gap_total += uncounted * s[last_sample];
+	gap_total += uncounted * last_sample;
 
 	gap_avg = gap_total / (chirp_pkts - 1);
 	if (gap_avg > U32_MAX)
