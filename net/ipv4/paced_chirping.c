@@ -467,9 +467,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		last_sample = start;
 
 	/* Calculate the average gap */
-	for (i = 1; i < chirp_pkts; ++i)
-		if (!((E[i] == 0) || (cnt && i >= start)))
-			gap_total += E[i];
 	gap_total += uncounted * s[last_sample];
 
 	gap_avg = gap_total / (chirp_pkts - 1);
