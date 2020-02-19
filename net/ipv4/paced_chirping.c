@@ -439,8 +439,8 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			excursion_start = i;
 			excursion_len = 0;
 			max_q = 0;
+
 			in_excursion = true;
-			gap_pending = 0;
 		}
 		if (in_excursion) {
 			/* Excursion continues? */
