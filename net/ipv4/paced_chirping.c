@@ -431,7 +431,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		if (cnt) {
 			/* Excursion continues? */
 			s32 q_diff = (s32)(qdelay[i] - qdelay[start]);
-			if (q_diff > (max_q >> 1) + (max_q >> 3)) {
+			if (q_diff >= (max_q >> 1) + (max_q >> 3)) {
 				max_q = max(max_q, q_diff);
 				cnt++;
 				if (qdelay[i] < qdelay[i + 1])
