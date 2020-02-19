@@ -428,6 +428,13 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		if ((i < chirp_pkts - 1) && ((s[i] << 1) < s[i+1]))
 			return INVALID_CHIRP;
 		E[i] = 0;
+
+		/* Start new excursion */
+		if (!cnt && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
+			start = i;
+			max_q = 0;
+			gap_pending = 0;
+		}
 		if (cnt) {
 			/* Excursion continues? */
 			s32 q_diff = (s32)(qdelay[i] - qdelay[start]);
@@ -444,14 +451,6 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				cnt = start = max_q = 0;
 				gap_pending = 0;
 			}
-		}
-
-		/* Start new excursion */
-		if (!cnt && (i < chirp_pkts - 1) && (qdelay[i] < qdelay[i + 1])) {
-			start = i;
-			max_q = 0;
-			cnt = 1;
-			gap_pending = s[i];
 		}
 	}
 
