@@ -413,6 +413,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u64 gap_pending = 0;
 	u64 gap_avg;
 	u64 last_delay;
+	u64 last_gap;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
 	s32 max_q = 0;
@@ -429,8 +430,9 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		return INVALID_CHIRP;
 
 	last_delay = qdelay[1];
+	last_gap = s[1];
 	for (i = 2; i <= chirp_pkts; ++i) {
-		if ((i < chirp_pkts) && ((s[i - 1] << 1) < s[i]))
+		if ((i < chirp_pkts) && ((last_gap << 1) < s[i]))
 			return INVALID_CHIRP;
 
 		uncounted++;
@@ -455,7 +457,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 					break;
 
 				if (last_delay < qdelay[i]) {
-					gap_pending += s[i - 1];
+					gap_pending += last_gap;
 					pending_count++;
 				}
 			} else {
@@ -471,6 +473,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 			}
 		}
 		last_delay = qdelay[i];
+		last_gap = s[i];
 	}
 
 	/* Unterminated excursion */
