@@ -412,6 +412,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	u64 gap_total = 0;
 	u64 gap_pending = 0;
 	u64 gap_avg;
+	u64 last_delay;
 	u32 *qdelay = chirp->qdelay;
 	ktime_t *s;
 	s32 max_q = 0;
@@ -427,6 +428,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 	if (chirp->ack_cnt < chirp_pkts >> 1)
 		return INVALID_CHIRP;
 
+	last_delay = qdelay[1];
 	for (i = 2; i <= chirp_pkts; ++i) {
 		if ((i < chirp_pkts) && ((s[i - 1] << 1) < s[i]))
 			return INVALID_CHIRP;
@@ -434,7 +436,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		uncounted++;
 
 		/* Start new excursion */
-		if (!in_excursion && (i < chirp_pkts) && (qdelay[i - 1] < qdelay[i])) {
+		if (!in_excursion && (i < chirp_pkts) && (last_delay < qdelay[i])) {
 			excursion_start = i - 1;
 			excursion_len = 0;
 			last_sample = excursion_start;
@@ -444,7 +446,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 		}
 		if (in_excursion) {
 			/* Excursion continues? */
-			s32 q_diff = (s32)(qdelay[i - 1] - qdelay[excursion_start]);
+			s32 q_diff = (s32)(last_delay - qdelay[excursion_start]);
 			if (q_diff >= (max_q >> 1) + (max_q >> 3)) {
 				max_q = max(max_q, q_diff);
 				excursion_len++;
@@ -452,7 +454,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				if (i == chirp_pkts)
 					break;
 
-				if (qdelay[i - 1] < qdelay[i]) {
+				if (last_delay < qdelay[i]) {
 					gap_pending += s[i - 1];
 					pending_count++;
 				}
@@ -468,6 +470,7 @@ static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 				in_excursion = false;
 			}
 		}
+		last_delay = qdelay[i];
 	}
 
 	/* Unterminated excursion */
