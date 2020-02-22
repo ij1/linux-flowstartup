@@ -1153,6 +1153,11 @@ struct tcp_congestion_ops {
 	 * after all the ca_state processing. (optional)
 	 */
 	void (*cong_control)(struct sock *sk, const struct rate_sample *rs);
+	/* call when congestion control indicates that it is sending chirps
+	 * and stack does not have a chirp description available.
+	 */
+	u32 (*new_chirp)(struct sock *sk);
+
 	/* get info for inet_diag (optional) */
 	size_t (*get_info)(struct sock *sk, u32 ext, int *attr,
 			   union tcp_cc_info *info);
