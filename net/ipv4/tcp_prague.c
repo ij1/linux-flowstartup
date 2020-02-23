@@ -35,6 +35,8 @@
 #include <linux/inet_diag.h>
 #include <linux/inet.h>
 
+#include "paced_chirping.h"
+
 #define PRAGUE_ALPHA_BITS	31
 #define PRAGUE_MAX_ALPHA	((u64)(1U << PRAGUE_ALPHA_BITS))
 
@@ -50,6 +52,8 @@ struct prague {
 	u32 max_tso_burst;
 	bool was_ce;
 	bool saw_ce;
+
+	struct paced_chirping pc;
 };
 
 static u32 prague_shift_g __read_mostly = 4; /* g = 1/2^4 */
@@ -218,6 +222,11 @@ static void prague_update_window(struct sock *sk,
 
 static void prague_cong_control(struct sock *sk, const struct rate_sample *rs)
 {
+	struct prague *ca = inet_csk_ca(sk);
+	if (paced_chirping_active(&ca->pc)) {
+		paced_chirping_update(sk, &ca->pc, rs);
+		return;
+	}
 	prague_update_window(sk, rs);
 	if (prague_rtt_complete(sk))
 		prague_rtt_expired(sk);
@@ -228,12 +237,18 @@ static void prague_cong_control(struct sock *sk, const struct rate_sample *rs)
 static void prague_react_to_loss(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
+	struct prague *ca = prague_ca(sk);
 
 	prague_ca(sk)->loss_cwnd = tp->snd_cwnd;
 	/* Stay fair with reno (RFC-style) */
 	tp->snd_ssthresh = max(tp->snd_cwnd >> 1U, 2U);
 	tp->snd_cwnd = tp->snd_ssthresh;
 	tp->snd_cwnd_stamp = tcp_jiffies32;
+
+	if (paced_chirping_active(&ca->pc)) {
+		paced_chirping_exit(sk, &ca->pc, EXIT_LOSS);
+		return;
+	}
 }
 
 static void prague_enter_cwr(struct sock *sk)
@@ -321,6 +336,7 @@ static size_t prague_get_info(struct sock *sk, u32 ext, int *attr,
 static void prague_release(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
+	struct prague *ca = prague_ca(sk);
 
 	/* We forced the use of ECT(x), disable this before switching CC */
 	INET_ECN_dontxmit(sk);
@@ -332,6 +348,8 @@ static void prague_release(struct sock *sk)
 	LOG(sk, "Releasing: delivered_ce=%u, received_ce=%u, "
 	    "received_ce_tx: %u\n", tp->delivered_ce, tp->received_ce,
 	    tp->received_ce_tx);
+
+	paced_chirping_release(&ca->pc);
 }
 
 static void prague_init(struct sock *sk)
@@ -357,6 +375,9 @@ static void prague_init(struct sock *sk)
 		cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE,
 			SK_PACING_NEEDED);
 
+		if (paced_chirping_enabled)
+			paced_chirping_init(sk, tp, &ca->pc);
+
 		prague_reset(tp, ca);
 		return;
 	}
@@ -370,12 +391,19 @@ static void prague_init(struct sock *sk)
 	inet_csk(sk)->icsk_ca_ops = &prague_reno;
 }
 
+static u32 prague_new_chirp(struct sock *sk)
+{
+	struct prague *ca = prague_ca(sk);
+	return paced_chirping_new_chirp(sk, &ca->pc);
+}
+
 static struct tcp_congestion_ops prague __read_mostly = {
 	.init		= prague_init,
 	.release	= prague_release,
 	.cong_control	= prague_cong_control,
 	.cwnd_event	= prague_cwnd_event,
 	.ssthresh	= prague_ssthresh,
+	.new_chirp      = prague_new_chirp,
 	.undo_cwnd	= prague_cwnd_undo,
 	.set_state	= prague_state,
 	.get_info	= prague_get_info,
