@@ -53,7 +53,7 @@ void paced_chirping_exit(struct sock *sk, struct paced_chirping *pc, u32 reason)
 	tp->is_chirping = 0;
 	tp->disable_cwr_upon_ece = 0;
 	tp->disable_kernel_pacing_calculation = 0;
-	cmpxchg(&sk->sk_pacing_status, SK_PACING_NEEDED, SK_PACING_NONE);
+	//cmpxchg(&sk->sk_pacing_status, SK_PACING_NEEDED, SK_PACING_NONE);
 	sk->sk_pacing_rate = ~0U;
 	pc->pc_state = 0;
 
@@ -494,7 +494,7 @@ void paced_chirping_init(struct sock *sk, struct tcp_sock *tp,
 
 	/* Alter kernel behaviour*/
 	sk->sk_pacing_rate = ~0U; /*This disables pacing until I explicitly set it.*/
-	sk_pacing_shift_update(sk, 5);
+	//sk_pacing_shift_update(sk, 5); /* Not sure if this is needed. Idea was to prevent excessive buffering. */
 	tp->disable_kernel_pacing_calculation = 1;
 	tp->disable_cwr_upon_ece = 1;
 	tp->is_chirping = 1;

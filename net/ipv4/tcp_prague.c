@@ -223,7 +223,7 @@ static void prague_update_window(struct sock *sk,
 static void prague_cong_control(struct sock *sk, const struct rate_sample *rs)
 {
 	struct prague *ca = inet_csk_ca(sk);
-	if (paced_chirping_active(&ca->pc)) {
+	if (paced_chirping_enabled && paced_chirping_active(&ca->pc)) {
 		paced_chirping_update(sk, &ca->pc, rs);
 		return;
 	}
@@ -245,7 +245,7 @@ static void prague_react_to_loss(struct sock *sk)
 	tp->snd_cwnd = tp->snd_ssthresh;
 	tp->snd_cwnd_stamp = tcp_jiffies32;
 
-	if (paced_chirping_active(&ca->pc)) {
+	if (paced_chirping_enabled && paced_chirping_active(&ca->pc)) {
 		paced_chirping_exit(sk, &ca->pc, EXIT_LOSS);
 		return;
 	}
