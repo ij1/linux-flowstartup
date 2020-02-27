@@ -406,7 +406,7 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 				   ntohl(sk->sk_daddr),
 				   sk->sk_num,
 				   ntohs(sk->sk_dport),
-				   pc->pc_state &= MARKING_PKT_RECVD));
+				   pc->pc_state & MARKING_PKT_RECVD));
 
 
 
