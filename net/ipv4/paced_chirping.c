@@ -15,24 +15,27 @@
 
 #include "paced_chirping.h"
 
-/* Private functions */
+/* Algorithm functions */
 static inline void start_new_round(struct tcp_sock *tp, struct paced_chirping *pc);
 static u32 should_terminate(struct tcp_sock *tp, struct paced_chirping *pc);
 static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 new_estimate_ns);
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp);
 
+
+/* Helper functions */
 static struct cc_chirp* get_first_chirp(struct paced_chirping *pc);
 static struct cc_chirp* get_last_chirp(struct paced_chirping *pc);
 
-static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N);
-static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp);
-
 static u32 gap_to_Bps_ns(struct sock *sk, struct tcp_sock *tp, u32 gap_ns);
-
 static uint32_t switch_divide(uint32_t value, uint32_t by, u8 round_up);
+
+/* Experimental functionality */
+static bool enough_data_for_chirp(struct sock *sk, struct tcp_sock *tp, int N);
+static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp);
 static struct cc_chirp* cached_chirp_malloc(struct paced_chirping *pc);
 static void cached_chirp_dealloc(struct cc_chirp *chirp);
 
+/* Functions for debugging */
 static void print_u64_array(u64 *array, u32 size, char *name, struct sock *sk);
 static void print_u32_array(u32 *array, u32 size, char *name, struct sock *sk);
 
@@ -92,7 +95,10 @@ EXPORT_SYMBOL(paced_chirping_release);
 
 static inline void start_new_round(struct tcp_sock *tp, struct paced_chirping *pc)
 {
-	if (pc->chirp_number >= 6 && pc->round_sent >= (pc->M>>M_SHIFT)) /* Next chirp to be sent */
+	/* We only increase the number of chirps if we have sent the first 6 chirps
+	 * and we managed to exhaust the previous allowed number of chirps.
+	 * The first 6 chirps have sizes 5, 5, 8, 8, 16, 16. */
+	if (pc->chirp_number >= 6 && pc->round_sent >= (pc->M>>M_SHIFT))
 		pc->M = (pc->M * pc->gain)>>G_G_SHIFT;
 
 	pc->round_start = pc->chirp_number;
@@ -177,7 +183,9 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	else if (pc->chirp_number <= 3)
 		N = 8;
 
-	/*Send marking packet*/
+	/* Send marking packet 
+	 * This should probably made more robust. One option is to check that the sequence number change between
+	 * this and the next call. */
 	if (!(pc->pc_state & MARKING_PKT_SENT) && /* Not sent already */
 	    (cur_chirp = get_first_chirp(pc)) &&
 	    cur_chirp->chirp_number == 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
@@ -201,8 +209,10 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	}
 	  
 	
-	/*TODO: Use TCP slow start as fallback.*/
-	/*Better to mark chirp as possible*/
+	/* TODO: Use TCP slow start as fallback?
+	 * In the earlier versions of Paced Chirping we assumed that the application
+	 * was sending data at a rate fast enough to not make the sending of the chirp stall.
+	 * I (Joakim) am not sure if this is needed. */
 	if (pc->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))  {
 		return 0;
 	}
@@ -257,7 +267,9 @@ EXPORT_SYMBOL(paced_chirping_new_chirp);
 
 
 
-
+/* Calculates an estimate of the dispersion at the bottleneck based on 
+ * send-times and queueing delay measurements recorded in chirp.
+ * The struct sock pointer is only used for debug printing. */
 static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
 {
 	u32 N = chirp->qdelay_index;
@@ -354,7 +366,8 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 	if (!pc->pc_state || rtt_us <= 0 || pkts_acked == 0)
 		return;
 
-	/* We have terminated, but are waiting for scheduled packet to be sent*/
+	/* We have terminated, but are waiting for scheduled packet to be sent.
+	 * This might be bad is the estimate is too high, as it worsens congestion. */
 	if (pc->pc_state & STATE_TRANSITION) {
 		if ((pc->round_sent++ > (pc->round_start))) {
 			paced_chirping_exit(sk, pc, EXIT_TRANSITION);
@@ -370,28 +383,30 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 	
 	if (pkts_acked)
 		cur_chirp->ack_cnt++;
-	
+
+	/* This also works for delayed acks, but need to check for great aggregation. */
 	for (i = 0; i < pkts_acked; ++i) {
 		if (!cur_chirp) {
 			if (!(cur_chirp = get_first_chirp(pc)))
 				break;
 			cur_chirp->ack_cnt++;
 		}
+		/* Packet not part of the oldest chirp.
+		 * Can be marking packet or packet sent because of
+		 * insufficient amount of data for a whole chirp. */
 		if (!before(cur_chirp->begin_seq, tp->snd_una)) {
-			u32 mark = 0;
 			if ((pc->pc_state & MARKING_PKT_SENT) &&
 			    !(pc->pc_state & MARKING_PKT_RECVD) &&
 				cur_chirp->chirp_number == 2) {
 				pc->pc_state |= MARKING_PKT_RECVD;
 				start_new_round(tp, pc);
-				mark = 1;
 			}
 			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:outoforder,RECEIVED_MARK=%d\n",
 				   ntohl(sk->sk_rcv_saddr),
 				   ntohl(sk->sk_daddr),
 				   sk->sk_num,
 				   ntohs(sk->sk_dport),
-				   mark));
+				   pc->pc_state &= MARKING_PKT_RECVD));
 
 
 
