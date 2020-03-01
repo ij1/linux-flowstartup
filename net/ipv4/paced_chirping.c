@@ -142,7 +142,19 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 
 static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 {
-	return SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
+	int enough = SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
+	if (!enough) {
+		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,need=%lu,total=%lu,have=%d,engh=%d\n",
+			   ntohl(sk->sk_rcv_saddr),
+			   ntohl(sk->sk_daddr),
+			   sk->sk_num,
+			   ntohs(sk->sk_dport),
+			   SKB_TRUESIZE(tp->mss_cache)*N,
+			   SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out),
+			   sk->sk_wmem_queued,
+			   enough));
+	}
+	return enough;
 }
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
 {
@@ -213,7 +225,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	 * In the earlier versions of Paced Chirping we assumed that the application
 	 * was sending data at a rate fast enough to not make the sending of the chirp stall.
 	 * I (Joakim) am not sure if this is needed. */
-	if (pc->chirp_number == 0 && !enough_data_for_chirp(sk, tp, N))  {
+	if (!enough_data_for_chirp(sk, tp, N))  {
 		return 0;
 	}
 
@@ -253,12 +265,14 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	tp->snd_cwnd += N;
 	
 
-	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:sched_chirp=%d\n",
+	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:sched_chirp=%d,avg=%d,guard=%d\n",
 		   ntohl(sk->sk_rcv_saddr),
 		   ntohl(sk->sk_daddr),
 		   sk->sk_num,
 		   ntohs(sk->sk_dport),
-		   new_chirp->chirp_number));
+		   new_chirp->chirp_number,
+		   pc->gap_avg_ns,
+		   tp->chirp.guard_interval_ns));
 
 	return 0;
 }
