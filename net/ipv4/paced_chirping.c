@@ -98,7 +98,7 @@ static inline void start_new_round(struct tcp_sock *tp, struct paced_chirping *p
 	/* We only increase the number of chirps if we have sent the first 6 chirps
 	 * and we managed to exhaust the previous allowed number of chirps.
 	 * The first 6 chirps have sizes 5, 5, 8, 8, 16, 16. */
-	if (pc->chirp_number >= 6 && pc->round_sent >= (pc->M>>M_SHIFT))
+	if (pc->chirp_number >= 6)
 		pc->M = (pc->M * pc->gain)>>G_G_SHIFT;
 
 	pc->round_start = pc->chirp_number;
@@ -143,7 +143,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 {
 	int enough = SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
-	if (!enough) {
+	/*if (!enough) {
 		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,need=%lu,total=%lu,have=%d,engh=%d\n",
 			   ntohl(sk->sk_rcv_saddr),
 			   ntohl(sk->sk_daddr),
@@ -153,7 +153,7 @@ static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 			   SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out),
 			   sk->sk_wmem_queued,
 			   enough));
-	}
+			   }*/
 	return enough;
 }
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
@@ -200,7 +200,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	 * this and the next call. */
 	if (!(pc->pc_state & MARKING_PKT_SENT) && /* Not sent already */
 	    (cur_chirp = get_first_chirp(pc)) &&
-	    cur_chirp->chirp_number == 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
+	    cur_chirp->chirp_number >= 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
 	{
 		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:SENDING_MARK\n",
 			   ntohl(sk->sk_rcv_saddr),
@@ -276,7 +276,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	
 
 	pc->round_sent += 1;
-	pc->round_length_us += pc->gap_avg_ns + chirp_length_ns>>10;
+	pc->round_length_us += pc->gap_avg_ns/1000 + (chirp_length_ns>>10);
 	
 	list_add_tail(&(new_chirp->list), &(pc->chirp_list->list));
 	tp->snd_cwnd += N;
@@ -491,28 +491,32 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			cached_chirp_dealloc(cur_chirp);
 			cur_chirp = NULL;
 		}
-
-		if (should_terminate(tp, pc)) {
-			u32 rate = gap_to_Bps_ns(sk, tp, min(5000000U, pc->gap_avg_ns));
-			sk->sk_pacing_rate = rate;
-
-			/*Send for one bdp*/
-			pc->round_sent = 0;
-			pc->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)pc->gap_avg_ns));
-			tp->snd_cwnd = max((u32)(pc->round_start<<1), 10U);
-
-			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u\n",
-				   ntohl(sk->sk_rcv_saddr),
-				   ntohl(sk->sk_daddr),
-				   sk->sk_num,
-				   ntohs(sk->sk_dport),
-				   pc->gap_avg_ns, tp->snd_cwnd, pc->round_start,rate));
-			
-			pc->pc_state |= STATE_TRANSITION;
-			tp->is_chirping = 0;
-		}
-		
 	}
+
+	if (should_terminate(tp, pc)) {
+		u32 rate = gap_to_Bps_ns(sk, tp, min(5000000U, pc->gap_avg_ns));
+		sk->sk_pacing_rate = rate;
+
+		/*Send for one bdp*/
+		pc->round_sent = 0;
+		pc->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)pc->gap_avg_ns));
+		tp->snd_cwnd = max((u32)(pc->round_start<<1), 10U);
+
+		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u,state=%d,length=%u,srtt=%u\n",
+			   ntohl(sk->sk_rcv_saddr),
+			   ntohl(sk->sk_daddr),
+			   sk->sk_num,
+			   ntohs(sk->sk_dport),
+			   pc->gap_avg_ns, tp->snd_cwnd, pc->round_start,rate,
+			   pc->pc_state,
+			   pc->round_length_us,
+			   tp->srtt_us >> 3));
+			
+		pc->pc_state |= STATE_TRANSITION;
+		tp->is_chirping = 0;
+	}
+		
+	
 }
 EXPORT_SYMBOL(paced_chirping_update);
 

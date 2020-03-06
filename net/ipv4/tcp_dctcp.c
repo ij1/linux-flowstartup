@@ -250,7 +250,9 @@ static void dctcp_acked(struct sock *sk, const struct ack_sample *sample)
 	struct rate_sample rs;
 	rs.rtt_us = sample->rtt_us;
 	rs.acked_sacked = sample->pkts_acked;
-	paced_chirping_update(sk, &ca->pc, &rs);
+	if (paced_chirping_enabled && paced_chirping_active(&ca->pc)) {
+		paced_chirping_update(sk, &ca->pc, &rs);
+	}
 }
 
 static u32 dctcp_new_chirp (struct sock *sk)
