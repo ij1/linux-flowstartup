@@ -234,7 +234,24 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 			     tp->inet_conn.icsk_bind_hash->port);
 		return 0;	
 	}
-        
+        /* A chirp consists of N packets sent with decreasing inter-packet time (increasing rate).
+	 *
+	 * Gap between packet i-1 and i is initial_gap_ns - gap_step_ns * i, where i >= 2 (second packet)
+	 *
+	 * initial_gap_ns is the inter-packet time between the first and second packet
+	 * It is set to the average gap in the chirp times the geometry. Geometry is in the range (1.0, 2.0]
+	 *
+	 * gap_step_ns is the magnitude of the negative slope of the inter-packet times
+	 *                   target average gap * (geometry - 1) * 2
+	 * It is set to     ----------------------------------------
+	 *                                    N
+	 *
+	 * It makes the actual average gap slightly higher than the target average gap.
+	 *
+	 * guard_interval_ns is the time in-between chirps needed to spread the chirps evenly across the measured SRTT.
+	 * 
+	 * 
+	 */
 	gap_step_ns = switch_divide((((pc->geometry - (1<<G_G_SHIFT))<<1))*pc->gap_avg_ns , N, 1U) >> G_G_SHIFT;
 	initial_gap_ns = (pc->gap_avg_ns * pc->geometry)>>G_G_SHIFT;
 	chirp_length_ns = initial_gap_ns + (((N-2) * ((initial_gap_ns<<1) - N*gap_step_ns + gap_step_ns))>>1);
@@ -259,7 +276,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	
 
 	pc->round_sent += 1;
-	pc->round_length_us += chirp_length_ns>>10;
+	pc->round_length_us += pc->gap_avg_ns + chirp_length_ns>>10;
 	
 	list_add_tail(&(new_chirp->list), &(pc->chirp_list->list));
 	tp->snd_cwnd += N;
@@ -473,27 +490,28 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			list_del(&(cur_chirp->list));
 			cached_chirp_dealloc(cur_chirp);
 			cur_chirp = NULL;
-
-			if (should_terminate(tp, pc)) {
-				u32 rate = gap_to_Bps_ns(sk, tp, min(5000000U, pc->gap_avg_ns));
-				sk->sk_pacing_rate = rate;
-
-				/*Send for one bdp*/
-				pc->round_sent = 0;
-				pc->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)pc->gap_avg_ns));
-				tp->snd_cwnd = max((u32)(pc->round_start<<1), 10U);
-
-				LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u\n",
-					   ntohl(sk->sk_rcv_saddr),
-					   ntohl(sk->sk_daddr),
-					   sk->sk_num,
-					   ntohs(sk->sk_dport),
-					   pc->gap_avg_ns, tp->snd_cwnd, pc->round_start,rate));
-			
-				pc->pc_state |= STATE_TRANSITION;
-				tp->is_chirping = 0;
-			}
 		}
+
+		if (should_terminate(tp, pc)) {
+			u32 rate = gap_to_Bps_ns(sk, tp, min(5000000U, pc->gap_avg_ns));
+			sk->sk_pacing_rate = rate;
+
+			/*Send for one bdp*/
+			pc->round_sent = 0;
+			pc->round_start = (u32)((u64)(tcp_min_rtt(tp) * 1000U)/max(1U, (u32)pc->gap_avg_ns));
+			tp->snd_cwnd = max((u32)(pc->round_start<<1), 10U);
+
+			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,target=%u,rate_Bps=%u\n",
+				   ntohl(sk->sk_rcv_saddr),
+				   ntohl(sk->sk_daddr),
+				   sk->sk_num,
+				   ntohs(sk->sk_dport),
+				   pc->gap_avg_ns, tp->snd_cwnd, pc->round_start,rate));
+			
+			pc->pc_state |= STATE_TRANSITION;
+			tp->is_chirping = 0;
+		}
+		
 	}
 }
 EXPORT_SYMBOL(paced_chirping_update);
