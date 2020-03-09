@@ -9,7 +9,6 @@
 /* Paced Chirping defines
  * All of these defined should probably be made surely unique */
 
-#define STATE_TRANSITION 0x20     
 #define STATE_ACTIVE 0x10
 #define MARKING_PKT_SENT 0x40
 #define MARKING_PKT_RECVD 0x80
