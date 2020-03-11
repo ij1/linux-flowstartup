@@ -58,6 +58,23 @@ struct cc_chirp {
 					      * Index 0 is (I think) unused. */
 	u64 inter_arrival_times[CHIRP_SIZE]; /* Inter-arrival times of the acks. The first entry, index 0,
 					      * is unusable/invalid. */
+
+	/* These can be placed somewhere else because they are used for at most one chirp at a time */
+	char uncounted;
+	char in_excursion;
+	u32 excursion_start;
+	char excursion_len;
+	u32 max_q;
+
+	u32 last_delay;
+	u64 last_gap;
+	u32 last_sample;
+
+	u64 gap_total;
+	u64 gap_pending;
+	char pending_count;
+
+	char valid;
 };
 
 struct paced_chirping {

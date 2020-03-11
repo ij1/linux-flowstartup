@@ -19,7 +19,6 @@
 static inline void start_new_round(struct tcp_sock *tp, struct paced_chirping *pc);
 static u32 should_terminate(struct tcp_sock *tp, struct paced_chirping *pc);
 static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 new_estimate_ns);
-static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp);
 
 
 /* Helper functions */
@@ -313,96 +312,6 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 }
 EXPORT_SYMBOL(paced_chirping_new_chirp);
 
-
-
-
-/* Calculates an estimate of the dispersion at the bottleneck based on 
- * send-times and queueing delay measurements recorded in chirp.
- * The struct sock pointer is only used for debug printing. */
-static u32 analyze_chirp(struct sock *sk, struct cc_chirp *chirp)
-{
-	u32 N = chirp->qdelay_index;
-	int i, j, l = N-1;
-	u64 gap_avg = 0;
-	u32 *q = chirp->qdelay;
-	ktime_t *s;
-	u32 L = paced_chirping_L;
-	u32 max_q = 0;
-	u32 excursion_cnt = 0;
-	u32 excursion_start = 0;
-	u32 E[CHIRP_SIZE];
-	
-	int q_diff = 0;
-
-	s = chirp->scheduled_gaps;
-	
-	print_u64_array((u64*)s, N, "gaps", sk);
-	print_u32_array(q, N, "queue", sk);
-	print_u64_array(chirp->inter_arrival_times, N, "interarr", sk);
-
-	if (N < 2)
-		return INVALID_CHIRP;
-	if (chirp->ack_cnt < N>>1) /* Ack aggregation is too great. This might be too strict. */
-		return INVALID_CHIRP;
-										     
-	for (i = 1; i < N; ++i) {
-
-		if (i < (N-1) && (s[i]<<1) < s[i+1])
-			return INVALID_CHIRP;
-		E[i] = 0;
-		/*Check if currently tracking a possible excursion*/
-		q_diff = (int)q[i] - (int)q[excursion_start];
-		
-		if(excursion_cnt && q_diff >= 0 &&
-		   ((u32)q_diff > ((max_q>>1) + (max_q>>3)))) {
-			max_q = max(max_q, (u32)q_diff);
-			excursion_cnt++;
-		} else { /*Excursion has ended or never started.*/
-			if (excursion_cnt >= L) {
-				for (j = excursion_start;
-				     j < excursion_start + excursion_cnt;
-				     ++j) {
-					/* When dealing with delayed acks this check should probably be <= */
-					if (q[j] < q[j+1])
-						E[j] = (uint32_t)s[j];
-				}
-			}
-			excursion_cnt = excursion_start = max_q = 0;
-		}
-		
-		/*Start new excursion*/
-		if (!excursion_cnt && (i < (N-1)) && (q[i] < q[i+1])) {
-			excursion_start = i;
-			max_q = 0U;
-			excursion_cnt = 1;
-		}
-	}
-
-	/* Unterminated excursion */
-	if (excursion_cnt && (excursion_cnt+excursion_start) == N ) {
-		for (j = excursion_start;
-		     j < (excursion_start + excursion_cnt);
-		     ++j) {
-			E[j] = (uint32_t)s[excursion_start];
-		}
-		l = excursion_start;
-	}
-
-	/*Calculate the average gap*/
-	for (i = 1; i < N; ++i) {
-		if (E[i] == 0)
-			gap_avg += (uint32_t)s[l];
-		else
-			gap_avg += E[i];
-	}
-	print_u32_array(E, N, "E", sk);
-
-	gap_avg = gap_avg/(N-1);
-	if (gap_avg > U32_MAX)
-		gap_avg = INVALID_CHIRP;
-	return gap_avg;
-}
-
 int check_termination(struct sock *sk, struct tcp_sock *tp, struct paced_chirping *pc)
 {
 	if (should_terminate(tp, pc)) {
@@ -446,12 +355,13 @@ int check_termination(struct sock *sk, struct tcp_sock *tp, struct paced_chirpin
 void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const struct rate_sample *rs)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-    	struct cc_chirp *cur_chirp = NULL;
+    	struct cc_chirp *c = NULL; /* The current chirp. Short name to make code more readable. */
 	long rtt_us = rs->rtt_us;
 	u32 pkts_acked = rs->acked_sacked;
 	int i;
 	u32 new_estimate;
 	u64 cur_time, diff;
+	u32 q_diff, qdelay;
 
 	if (!pc->pc_state || rtt_us <= 0 || pkts_acked == 0)
 		return;
@@ -460,24 +370,24 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 	if (check_termination(sk, tp, pc))
 		return;
 
-	if(!(cur_chirp = get_first_chirp(pc)))
+	if(!(c = get_first_chirp(pc)))
 		return;
 
 	/* Inter-arrival times are currently unused. They were used for the two first chirps/bursts
 	 * in the first version of the code. Undecided whether to use it or not. */
 	cur_time = ktime_to_ns(ktime_get_real());
-	diff = cur_time - cur_chirp->inter_arrival_times[0];
+	diff = cur_time - c->inter_arrival_times[0];
 	diff = diff/pkts_acked;
 	
 	if (pkts_acked)
-		cur_chirp->ack_cnt++;
+		c->ack_cnt++;
 
 	/* This should also works for delayed acks, but need to check for great aggregation. */
 	for (i = 0; i < pkts_acked; ++i) {
-		if (!cur_chirp) {
-			if (!(cur_chirp = get_first_chirp(pc)))
+		if (!c) {
+			if (!(c = get_first_chirp(pc)))
 				break;
-			cur_chirp->ack_cnt++;
+			c->ack_cnt++;
 		}
 		/* Packet not part of the oldest chirp.
 		 * Can be marking packet or packet sent because of
@@ -487,14 +397,14 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 		 * first packet of that chirp. It might be counted as part
 		 * of the chirp. The fix will probably be to make the sequence check
 		 * more robust. */
-		if (!before(cur_chirp->begin_seq, tp->snd_una)) {
+		if (!before(c->begin_seq, tp->snd_una)) {
 
 			/* If the marking packet is acked with the
 			 * first packet of the third chirp, round three
 			 * will start in other check below. */
 			if ((pc->pc_state & MARKING_PKT_SENT) &&
 			    !(pc->pc_state & MARKING_PKT_RECVD) &&
-				cur_chirp->chirp_number == 2) {
+				c->chirp_number == 2) {
 				pc->pc_state |= MARKING_PKT_RECVD;
 				start_new_round(tp, pc);
 			}
@@ -512,49 +422,139 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			continue;
 		}
 
-		if (cur_chirp->chirp_number >= 2U && cur_chirp->chirp_number == pc->round_start
-		    && cur_chirp->qdelay_index == 0) {
+		if (c->chirp_number >= 2U && c->chirp_number == pc->round_start
+		    && c->qdelay_index == 0) {
 			start_new_round(tp, pc);
-			//pc->pc_state |= (MARKING_PKT_RECVD | MARKING_PKT_SENT);
 		}
 
-		if (cur_chirp->qdelay_index != cur_chirp->N) {
-			cur_chirp->inter_arrival_times[cur_chirp->qdelay_index] = diff;
-			cur_chirp->inter_arrival_times[0] = cur_time;
-			/* Does not (?) matter if we use minimum rtt for this chirp of for the duration of
-			 * the connection because the analysis uses relative queue delay in analysis.
-			 * Assumes no reordering or loss. Have to link seq number to array index. */
-			cur_chirp->qdelay[cur_chirp->qdelay_index++] = rtt_us - tcp_min_rtt(tp);
+		qdelay = rtt_us - tcp_min_rtt(tp);
+
+		/* Kept for logging of qdelay */
+		if (c->qdelay_index != c->N) {
+                       c->inter_arrival_times[c->qdelay_index] = diff;
+                       c->inter_arrival_times[0] = cur_time;
+                       /* Does not (?) matter if we use minimum rtt for this chirp of for the duration of
+                        * the connection because the analysis uses relative queue delay in analysis.
+                        * Assumes no reordering or loss. Have to link seq number to array index. */
+                       c->qdelay[c->qdelay_index] = qdelay;
 		}
-		
-		/*Chirp is completed*/
-		if (cur_chirp->qdelay_index >= cur_chirp->N &&
-		    (cur_chirp->fully_sent && !after(cur_chirp->end_seq, tp->snd_una))) {
+
+		if (c->qdelay_index == 0U) { /* First packet. Currently unused */
+
+			c->uncounted = 0;
+			c->in_excursion = 0;
+			c->excursion_start = 0;
+			c->excursion_len = 0;
+			c->max_q = 0;
+			c->gap_total = 0;
+			c->gap_pending = 0;
+			c->pending_count = 0;
+			c->valid = 1;
+
+		} else if (c->qdelay_index == 1U) { /* Second packet */
+
+			c->last_delay = qdelay;
+			c->last_gap = c->scheduled_gaps[1];
+
+		} else if (c->qdelay_index > 1U && c->valid) { /* All other packets */
+
+			if (c->qdelay_index < c->N &&
+			    (c->last_gap<<1) < c->scheduled_gaps[c->qdelay_index]) {
+				c->valid = 0;
+			}
+
+			c->uncounted++;
+
+			if (!c->in_excursion &&
+			    c->last_delay < qdelay &&
+			    c->qdelay_index < c->N) {
+				c->excursion_start = c->last_delay;
+				c->excursion_len = 0;
+				c->last_sample = c->last_gap;
+				c->max_q = 0;
+				c->in_excursion = 1;
+			}
+
+			if (c->in_excursion) {
+
+				q_diff = c->last_delay - c->excursion_start;
+
+				if (q_diff >= ((c->max_q>>1) + (c->max_q>>3))) {
+					c->max_q = c->max_q > q_diff ? c->max_q:q_diff;
+					c->excursion_len++;
+
+					if (c->qdelay_index != c->N &&
+					    c->last_delay < qdelay) {
+						c->gap_pending += c->last_gap;
+						c->pending_count++;
+					}
+				} else {
+					if (c->excursion_len >= paced_chirping_L) {
+						c->gap_total += c->gap_pending;
+						c->uncounted -= c->pending_count;
+					}
+					c->gap_pending = 0;
+					c->pending_count = 0;
+					c->in_excursion = 0;
+
+					if (!c->in_excursion &&
+					    c->last_delay < qdelay &&
+					    c->qdelay_index < c->N) {
+						c->excursion_start = c->last_delay;
+						c->excursion_len = 1;
+						c->last_sample = c->last_gap;
+						c->max_q = 0;
+						c->in_excursion = 1;
+						c->gap_pending = c->last_gap;
+						c->pending_count = 1;
+					}
+				}
+			}
+
+			if (c->qdelay_index != c->N) {
+				c->last_delay = qdelay;
+				c->last_gap = c->scheduled_gaps[c->qdelay_index];
+			}
+		}
+
+		if (c->qdelay_index == c->N) {
+			/* For debugging */
+			print_u64_array((u64*)c->scheduled_gaps, c->N, "gaps", sk);
+			print_u32_array(c->qdelay, c->N, "queue", sk);
+			print_u64_array(c->inter_arrival_times, c->N, "interarr", sk);
 			
-			new_estimate = analyze_chirp(sk, cur_chirp);
-			update_gap_avg(tp, pc, new_estimate);
+			if (c->in_excursion)
+				c->last_sample = c->last_gap;
+			
+			c->gap_total += c->uncounted * c->last_sample;
+			new_estimate = c->gap_total / (c->N - 1);
+
+			if (c->valid)
+				update_gap_avg(tp, pc, new_estimate);
 
 			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,chirp_num=%u,estimate=%u,new_avg=%u,pkts_out=%u,nxt_chirp=%u,min_rtt=%u,ack_cnt=%u\n",
 				   ntohl(sk->sk_rcv_saddr),
 				   ntohl(sk->sk_daddr),
 				   sk->sk_num,
 				   ntohs(sk->sk_dport),
-				   cur_chirp->chirp_number,
+				   c->chirp_number,
 				   new_estimate,
 				   pc->gap_avg_ns,
 				   tp->packets_out,
 				   pc->chirp_number,
 				   tcp_min_rtt(tp),
-				   cur_chirp->ack_cnt));
+				   c->ack_cnt));
 			
 			/* Second round starts when the first chirp has been analyzed. */
-			if (cur_chirp->chirp_number == 0U) {
+			if (c->chirp_number == 0U) {
 				start_new_round(tp, pc);
 			}
-			list_del(&(cur_chirp->list));
-			cached_chirp_dealloc(cur_chirp);
-			cur_chirp = NULL;
+			list_del(&(c->list));
+			cached_chirp_dealloc(c);
+			c = NULL;
 		}
+		
+		c->qdelay_index++;
 	}
 }
 EXPORT_SYMBOL(paced_chirping_update);
