@@ -1280,6 +1280,15 @@ static struct ctl_table ipv4_net_table[] = {
 		.extra2		= &thousand,
 	},
 	{
+		.procname       = "tcp_delayed_acks",
+		.data           = &init_net.ipv4.sysctl_tcp_delayed_acks,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
+	{
 		.procname	= "tcp_pacing_ca_ratio",
 		.data		= &init_net.ipv4.sysctl_tcp_pacing_ca_ratio,
 		.maxlen		= sizeof(int),
