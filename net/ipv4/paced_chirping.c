@@ -34,10 +34,6 @@ static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp);
 static struct cc_chirp* cached_chirp_malloc(struct paced_chirping *pc);
 static void cached_chirp_dealloc(struct cc_chirp *chirp);
 
-/* Functions for debugging */
-static void print_u64_array(u64 *array, u32 size, char *name, struct sock *sk);
-static void print_u32_array(u32 *array, u32 size, char *name, struct sock *sk);
-
 int paced_chirping_active(struct paced_chirping *pc)
 {
 	return pc->pc_state;
@@ -61,22 +57,6 @@ void paced_chirping_exit(struct sock *sk, struct paced_chirping *pc, u32 reason)
 	 * the next ack is received, if cong_control is not implemented. */
 	tp->disable_kernel_pacing_calculation = 0;
 	pc->pc_state = 0;
-
-	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,,exit=%u,gap=%u,cwnd=%u,min_rtt=%u,srtt=%u,round_length=%u,round_sent=%u,gain=%u,geometry=%u,cache=%lu\n",
-		   ntohl(sk->sk_rcv_saddr),
-		   ntohl(sk->sk_daddr),
-		   sk->sk_num,
-		   ntohs(sk->sk_dport),
-		   reason,
-		   pc->gap_avg_ns,
-		   tp->snd_cwnd,
-		   tcp_min_rtt(tp),
-		   tp->srtt_us >> 3,
-		   pc->round_length_us,
-		   pc->round_sent,
-		   (u32)pc->gain,
-		   (u32)pc->geometry,
-		   MEMORY_CACHE_SIZE_BYTES));
 }
 EXPORT_SYMBOL(paced_chirping_exit);
 
@@ -145,17 +125,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 {
 	int enough = SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
-	/*if (!enough) {
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,need=%lu,total=%lu,have=%d,engh=%d\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport),
-			   SKB_TRUESIZE(tp->mss_cache)*N,
-			   SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out),
-			   sk->sk_wmem_queued,
-			   enough));
-			   }*/
+
 	return enough;
 }
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
@@ -204,11 +174,6 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	    (cur_chirp = get_first_chirp(pc)) &&
 	    cur_chirp->chirp_number >= 0 && cur_chirp->qdelay_index > 0) /* Ack(s) of first chirp have been received */
 	{
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:SENDING_MARK\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport)));
 		pc->pc_state |= MARKING_PKT_SENT;
 		return 0;
 	}
@@ -294,19 +259,6 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	
 	list_add_tail(&(new_chirp->list), &(pc->chirp_list->list));
 	tp->snd_cwnd += N;
-	
-
-	LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:sched_chirp=%d,avg=%d,guard=%d,N=%u,length_us=%u,round_length=%u\n",
-		   ntohl(sk->sk_rcv_saddr),
-		   ntohl(sk->sk_daddr),
-		   sk->sk_num,
-		   ntohs(sk->sk_dport),
-		   new_chirp->chirp_number,
-		   pc->gap_avg_ns,
-		   tp->chirp.guard_interval_ns,
-		   N,
-		   chirp_length_ns>>10,
-		   pc->round_length_us));
 
 	return 0;
 }
@@ -338,15 +290,6 @@ int check_termination(struct sock *sk, struct tcp_sock *tp, struct paced_chirpin
 		 * This change should improve responsiveness. */
 		paced_chirping_exit(sk, pc, EXIT_TRANSITION);
 
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,final_gap=%u,cwnd=%d,rate_Bps=%u,length=%u,srtt=%u,minrtt=%u\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport),
-			   pc->gap_avg_ns, tp->snd_cwnd,rate,
-			   pc->round_length_us,
-			   tp->srtt_us >> 3,
-			   tcp_min_rtt(tp)));
 		return 1;
 	}
 	return 0;
@@ -410,14 +353,6 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			}
 			/* TCP Slow start ? */
 			//tp->snd_cwnd++;
-			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,INFO:outoforder,RECEIVED_MARK=%d\n",
-				   ntohl(sk->sk_rcv_saddr),
-				   ntohl(sk->sk_daddr),
-				   sk->sk_num,
-				   ntohs(sk->sk_dport),
-				   pc->pc_state & MARKING_PKT_RECVD));
-
-
 
 			continue;
 		}
@@ -518,11 +453,6 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 		}
 
 		if (c->qdelay_index == c->N) {
-			/* For debugging */
-			print_u64_array((u64*)c->scheduled_gaps, c->N, "gaps", sk);
-			print_u32_array(c->qdelay, c->N, "queue", sk);
-			print_u64_array(c->inter_arrival_times, c->N, "interarr", sk);
-			
 			if (c->in_excursion)
 				c->last_sample = c->last_gap;
 			
@@ -532,19 +462,6 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			if (c->valid)
 				update_gap_avg(tp, pc, new_estimate);
 
-			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,chirp_num=%u,estimate=%u,new_avg=%u,pkts_out=%u,nxt_chirp=%u,min_rtt=%u,ack_cnt=%u\n",
-				   ntohl(sk->sk_rcv_saddr),
-				   ntohl(sk->sk_daddr),
-				   sk->sk_num,
-				   ntohs(sk->sk_dport),
-				   c->chirp_number,
-				   new_estimate,
-				   pc->gap_avg_ns,
-				   tp->packets_out,
-				   pc->chirp_number,
-				   tcp_min_rtt(tp),
-				   c->ack_cnt));
-			
 			/* Second round starts when the first chirp has been analyzed. */
 			if (c->chirp_number == 0U) {
 				start_new_round(tp, pc);
@@ -684,55 +601,4 @@ static void cached_chirp_dealloc(struct cc_chirp *chirp)
 		kfree(chirp);
 	}
 		 
-}
-
-
-
-
-
-
-
-static void print_u32_array(u32 *array, u32 size, char *name, struct sock *sk)
-{
-	char buf[1000];
-	char *ptr = buf;
-	int i;
-	
-	//ptr += snprintf(ptr, 1000, "port=%hu,%s:", tp->inet_conn.icsk_bind_hash->port, name);
-	ptr += snprintf(ptr, 1000, "%u-%u-%hu-%hu,%s:",
-			ntohl(sk->sk_rcv_saddr),
-			ntohl(sk->sk_daddr),
-			sk->sk_num,
-			ntohs(sk->sk_dport),
-			name);
-
-	for (i = 0; i < size; ++i) {
-		if (!ptr)
-			continue;
-
-		ptr += snprintf(ptr, 15, "%u,", array[i]); 
-	}
-	LOG_PRINT((KERN_INFO "[PC] %s\n", buf));
-}
-static void print_u64_array(u64 *array, u32 size, char *name, struct sock *sk)
-{
-	char buf[1000];
-	char *ptr = buf;
-	int i;
-	
-	//ptr += snprintf(ptr, 1000, "port=%hu,%s:", tp->inet_conn.icsk_bind_hash->port, name);
-	ptr += snprintf(ptr, 1000, "%u-%u-%hu-%hu,%s:",
-			ntohl(sk->sk_rcv_saddr),
-			ntohl(sk->sk_daddr),
-			sk->sk_num,
-			ntohs(sk->sk_dport),
-			name);
-
-	for (i = 0; i < size; ++i) {
-		if (!ptr)
-			continue;
-
-		ptr += snprintf(ptr, 30, "%llu,", array[i]); 
-	}
-	LOG_PRINT((KERN_INFO "[PC] %s\n", buf));
 }
