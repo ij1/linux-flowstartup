@@ -525,7 +525,7 @@ static u32 gap_to_Bps_ns(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
 	if (!gap_ns) return 0;
 	rate = tp->mss_cache;
 	rate *= NSEC_PER_SEC;
-	rate = rate/(u64)gap_ns;
+	do_div(rate, gap_ns);
 	return (u32)rate;
 }
 
