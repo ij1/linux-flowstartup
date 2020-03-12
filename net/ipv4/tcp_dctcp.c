@@ -254,7 +254,7 @@ static u32 dctcp_new_chirp (struct sock *sk)
 	struct dctcp *ca = inet_csk_ca(sk);
 	return paced_chirping_new_chirp(sk, &ca->pc);
 }
- 
+
 static struct tcp_congestion_ops dctcp __read_mostly = {
 	.init		= dctcp_init,
 	.release	= dctcp_release,
@@ -271,7 +271,7 @@ static struct tcp_congestion_ops dctcp __read_mostly = {
 	.cong_avoid     = dctcp_cong_avoid,
 	.pkts_acked     = dctcp_acked,
 	.new_chirp      = dctcp_new_chirp,
-	
+
 	.name		= "dctcp",
 };
 

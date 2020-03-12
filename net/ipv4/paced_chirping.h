@@ -42,12 +42,12 @@ struct cc_chirp {
 	u16 N;            /* The number of packets/segments in this chirp */
 	u16 qdelay_index; /* Used to record the measured queue delays */
 	u16 ack_cnt;      /* The number of acks received. ack_cnt <= N*/
-	
+
 	u32 begin_seq;    /* Sequence number of first segment in chirp */
 	u32 end_seq;      /* Sequence number of first segment after last segment in the chirp */
 	u32 fully_sent;   /* The chirp has been fully sent and the kernel has requested a new chirp.
 			   * This can probably be removed and replaced by a check for end_seq != 0. */
-	
+
 	u32 qdelay[CHIRP_SIZE];              /* Queue delay experienced by each of the packets*/
 	u64 scheduled_gaps[CHIRP_SIZE];      /* Inter send times recorded by the kernel.
 					      * Index 0 is (I think) unused. */
@@ -86,7 +86,7 @@ struct paced_chirping {
 	u16 gain;            /* How much M is increased in-between rounds. M *= gain */
 	u16 geometry;        /* Controls the range of the gaps within each chirp  */
 
-	/* Memory caching 
+	/* Memory caching
 	 * Experimenting with allocating memory for the cc_chirp structures at the start of the flow to
 	 * reduce overhead. */
 	u16 cache_index;
