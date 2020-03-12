@@ -277,7 +277,7 @@ static struct tcp_congestion_ops dctcp __read_mostly = {
 	.cong_avoid     = dctcp_cong_avoid,
 	.pkts_acked     = dctcp_acked,
 	.new_chirp      = dctcp_new_chirp,
-	
+
 	.name		= "dctcp",
 };
 

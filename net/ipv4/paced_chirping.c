@@ -132,7 +132,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 	}
 	/* Safety bound for development min 30us, max 10ms (400Mbps ~ 1Mbps)*/
 	new_estimate_ns = max(min(new_estimate_ns, 10000000U), 30000U);
-	
+
 	if (pc->gap_avg_ns == 0U) {
 		pc->gap_avg_ns = new_estimate_ns;
 		return;
@@ -163,7 +163,7 @@ static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
 	return SKB_TRUESIZE(tp->mss_cache) * CHIRP_SIZE  < refcount_read(&sk->sk_wmem_alloc);
 }
 
-/* Callback that kernel calls when it has packets to be sent but either has no chirp description or 
+/* Callback that kernel calls when it has packets to be sent but either has no chirp description or
  * used the current one. */
 u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 {
@@ -179,7 +179,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	u32 chirp_length_ns;
 
 	if (!tp->is_chirping || !pc->chirp_list || !(pc->pc_state & STATE_ACTIVE)) {
-		return 1;	
+		return 1;
 	}
 
 	/* Save information */
@@ -197,7 +197,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	else if (pc->chirp_number <= 3)
 		N = 8;
 
-	/* Send marking packet 
+	/* Send marking packet
 	 * This should probably made more robust. One option is to check that the sequence number change between
 	 * this and the next call. */
 	if (!(pc->pc_state & MARKING_PKT_SENT) && /* Not sent already */
@@ -221,8 +221,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	if (pc->round_sent >= (pc->M>>M_SHIFT)) {
 		return 1;
 	}
-	  
-	
+
 	/* TODO: Use TCP slow start as fallback?
 	 * In the earlier versions of Paced Chirping we assumed that the application
 	 * was sending data at a rate fast enough to not make the sending of the chirp stall.
@@ -234,7 +233,7 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	if (!(new_chirp = cached_chirp_malloc(pc))) {
 		trace_printk("port=%hu,ERROR_MALLOC\n",
 			     tp->inet_conn.icsk_bind_hash->port);
-		return 0;	
+		return 0;
 	}
         /* A chirp consists of N packets sent with decreasing inter-packet time (increasing rate).
 	 *
@@ -279,19 +278,17 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 	tp->chirp.scheduled_gaps = new_chirp->scheduled_gaps;
 	tp->chirp.packets_out = 0;
 
-	
 	/* Save needed info */
 	new_chirp->chirp_number = pc->chirp_number++;
 	new_chirp->end_seq = new_chirp->begin_seq = tp->snd_nxt;
 	new_chirp->qdelay_index = 0;
 	new_chirp->fully_sent = 0;
 	new_chirp->ack_cnt = 0;
-	
 
 	pc->round_sent += 1;
 	/* >>10 approx /1000 */
 	pc->round_length_us += (pc->gap_avg_ns>>10) + (chirp_length_ns>>10);
-	
+
 	list_add_tail(&(new_chirp->list), &(pc->chirp_list->list));
 	tp->snd_cwnd += N;
 	
@@ -320,18 +317,18 @@ int check_termination(struct sock *sk, struct tcp_sock *tp, struct paced_chirpin
 		pc->gap_avg_ns = max(1U, pc->gap_avg_ns);
 		/* Performance-bound during development. */
 		pc->gap_avg_ns = min(5000000U, pc->gap_avg_ns);
-		
+
 		rate = gap_to_Bps_ns(sk, tp, pc->gap_avg_ns);
 		sk->sk_pacing_rate = rate;
 
 		/* cwnd needed to fill min_rtt at a inter-packet gap of gap_avg_ns.
 		 * This makes the algorithm susceptible to under-utilization if
-		 * the RTT increases due to e.g. path change. It should be noted that the 
+		 * the RTT increases due to e.g. path change. It should be noted that the
 		 * termination condition uses srtt. srtt might include a standing queue. */
 		cwnd = (u32)(((u64)tcp_min_rtt(tp) * 1000UL)/(u64)pc->gap_avg_ns);
 		tp->snd_cwnd = max(max(cwnd, tp->packets_out), 2U);
 		tp->snd_ssthresh = tp->snd_cwnd;
-		
+
 		/* Terminate right away. Transition phase is necessary (to ensure filled pipe)
 		 * only if pacing is to be turned off as paced chirping exits. For now assume that
 		 * pacing is kept on. An other option is to wait for the last chirp to be sent into the network.
@@ -355,7 +352,7 @@ int check_termination(struct sock *sk, struct tcp_sock *tp, struct paced_chirpin
 void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const struct rate_sample *rs)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-    	struct cc_chirp *c = NULL; /* The current chirp. Short name to make code more readable. */
+	struct cc_chirp *c = NULL; /* The current chirp. Short name to make code more readable. */
 	long rtt_us = rs->rtt_us;
 	u32 pkts_acked = rs->acked_sacked;
 	int i;
@@ -378,7 +375,7 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 	cur_time = ktime_to_ns(ktime_get_real());
 	diff = cur_time - c->inter_arrival_times[0];
 	diff = diff/pkts_acked;
-	
+
 	if (pkts_acked)
 		c->ack_cnt++;
 
@@ -391,7 +388,7 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 		}
 		/* Packet not part of the oldest chirp.
 		 * Can be marking packet or packet sent because of
-		 * insufficient amount of data for a whole chirp. 
+		 * insufficient amount of data for a whole chirp.
 		 * There is a potential issue here if a packet sent
 		 * right before the start of a chirp is acked with the
 		 * first packet of that chirp. It might be counted as part
@@ -525,7 +522,7 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			
 			if (c->in_excursion)
 				c->last_sample = c->last_gap;
-			
+
 			c->gap_total += c->uncounted * c->last_sample;
 			new_estimate = c->gap_total / (c->N - 1);
 
@@ -553,7 +550,7 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			cached_chirp_dealloc(c);
 			c = NULL;
 		}
-		
+
 		c->qdelay_index++;
 	}
 }
@@ -590,13 +587,13 @@ void paced_chirping_init(struct sock *sk, struct tcp_sock *tp,
 	tp->is_chirping = 1;
 
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
-		
+
 	pc->gap_avg_ns = 200000; /* 200 us */
 	pc->chirp_number = 0;
 	pc->round_start = 0;
 	pc->round_sent = 0;
 	pc->round_length_us = 0;
-		
+
 	pc->M = (2<<M_SHIFT);
 	pc->gain = max(paced_chirping_initial_gain, 1U << G_G_SHIFT);
 	pc->geometry = min(max(paced_chirping_initial_geometry, 1U << G_G_SHIFT), 3U << G_G_SHIFT);
@@ -604,12 +601,6 @@ void paced_chirping_init(struct sock *sk, struct tcp_sock *tp,
 	pc->pc_state = STATE_ACTIVE;
 }
 EXPORT_SYMBOL(paced_chirping_init);
-
-
-
-
-
-
 
 static u32 gap_to_Bps_ns(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
 {
@@ -620,10 +611,6 @@ static u32 gap_to_Bps_ns(struct sock *sk, struct tcp_sock *tp, u32 gap_ns)
 	rate = rate/(u64)gap_ns;
 	return (u32)rate;
 }
-
-
-
-
 
 static uint32_t switch_divide(uint32_t value, uint32_t by, u8 round_up)
 {
@@ -649,7 +636,6 @@ static uint32_t switch_divide(uint32_t value, uint32_t by, u8 round_up)
 	} else {
 		return value/by;
 	}
-			
 }
 
 
@@ -668,7 +654,7 @@ static struct cc_chirp* cached_chirp_malloc(struct paced_chirping *pc)
 			return ptr;
 		}
 	}
-	
+
 	ptr = kmalloc(sizeof(struct cc_chirp), GFP_KERNEL);
 	ptr->mem_flag = MEM_ALLOC;
 	return ptr;
@@ -683,7 +669,6 @@ static void cached_chirp_dealloc(struct cc_chirp *chirp)
 	} else if (chirp->mem_flag & MEM_ALLOC) {
 		kfree(chirp);
 	}
-		 
 }
 
 
