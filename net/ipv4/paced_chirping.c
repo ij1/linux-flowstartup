@@ -126,15 +126,13 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc,
 {
 	u32 prev_estimate_ns = pc->gap_avg_ns;
 
-	if (new_estimate_ns == INVALID_CHIRP) {
-		return;
-	}
-	/* Safety bound min 30us, max 10ms (400Mbps ~ 1Mbps). Use
-	 * Slow Start" out of these bounds.
-	 * ADDME: It might make sense to make the lower bound depend on
-	 * clock granularity.
-	 */
-	if ((new_estimate_ns > 10000000U) ||
+	if ((new_estimate_ns == INVALID_CHIRP) ||
+	    /* Safety bound min 30us, max 10ms (400Mbps ~ 1Mbps). Use
+	     * Slow Start" out of these bounds.
+	     * ADDME: It might make sense to make the lower bound depend on
+	     * clock granularity.
+	     */
+	    (new_estimate_ns > 10000000U) ||
 	    (new_estimate_ns < 30000U)) {
 		new_estimate_ns = prev_estimate_ns * (1 << (M_SHIFT-1)) / pc->M;
 	}
@@ -520,9 +518,9 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			c->gap_total += c->uncounted * c->last_sample;
 			new_estimate = c->gap_total / (c->N - 1);
 
-			if (c->valid)
-				update_gap_avg(tp, pc, new_estimate,
-					       c->chirp_number);
+			update_gap_avg(tp, pc,
+				       c->valid ? new_estimate : INVALID_CHIRP,
+				       c->chirp_number);
 
 			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,chirp_num=%u,estimate=%u,new_avg=%u,pkts_out=%u,nxt_chirp=%u,min_rtt=%u,ack_cnt=%u\n",
 				   ntohl(sk->sk_rcv_saddr),
