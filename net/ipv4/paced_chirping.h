@@ -21,6 +21,8 @@
 #define G_G_SHIFT 10              /* Gain and geometry shift */
 #define CHIRP_SIZE 16U
 
+#define INITIAL_GAP_AVG	200000U		/* 200 usecs */
+
 /* Used for logging/debugging */
 #define EXIT_BOGUS 0
 #define EXIT_LOSS 1

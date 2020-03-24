@@ -140,7 +140,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 		new_estimate_ns = prev_estimate_ns * 2;
 	}
 
-	if (pc->gap_avg_ns == 0U) {
+	if (pc->gap_avg_ns == INITIAL_GAP_AVG) {
 		pc->gap_avg_ns = new_estimate_ns;
 		return;
 	}
@@ -583,7 +583,7 @@ void paced_chirping_init(struct sock *sk, struct tcp_sock *tp,
 
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
 
-	pc->gap_avg_ns = 200000; /* 200 us */
+	pc->gap_avg_ns = INITIAL_GAP_AVG;
 	pc->chirp_number = 0;
 	pc->round_start = 0;
 	pc->round_sent = 0;
