@@ -136,7 +136,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc,
 	 */
 	if ((new_estimate_ns > 10000000U) ||
 	    (new_estimate_ns < 30000U)) {
-		new_estimate_ns = prev_estimate_ns * 2;
+		new_estimate_ns = prev_estimate_ns * (1 << (M_SHIFT-1)) / pc->M;
 	}
 
 	if (pc->gap_avg_ns == INITIAL_GAP_AVG && chirp_number == 0) {
