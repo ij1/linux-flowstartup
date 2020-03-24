@@ -130,8 +130,15 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 	if (new_estimate_ns == INVALID_CHIRP) {
 		return;
 	}
-	/* Safety bound for development min 30us, max 10ms (400Mbps ~ 1Mbps)*/
-	new_estimate_ns = max(min(new_estimate_ns, 10000000U), 30000U);
+	/* Safety bound min 30us, max 10ms (400Mbps ~ 1Mbps). Use
+	 * Slow Start" out of these bounds.
+	 * ADDME: It might make sense to make the lower bound depend on
+	 * clock granularity.
+	 */
+	if ((new_estimate_ns > 10000000U) ||
+	    (new_estimate_ns < 30000U)) {
+		new_estimate_ns = prev_estimate_ns * 2;
+	}
 
 	if (pc->gap_avg_ns == 0U) {
 		pc->gap_avg_ns = new_estimate_ns;
