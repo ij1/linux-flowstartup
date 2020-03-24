@@ -18,8 +18,6 @@
 /* Algorithm functions */
 static inline void start_new_round(struct tcp_sock *tp, struct paced_chirping *pc);
 static u32 should_terminate(struct tcp_sock *tp, struct paced_chirping *pc);
-static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 new_estimate_ns);
-
 
 /* Helper functions */
 static struct cc_chirp* get_first_chirp(struct paced_chirping *pc);
@@ -123,7 +121,8 @@ static struct cc_chirp* get_last_chirp(struct paced_chirping *pc)
 	return list_last_entry(&(pc->chirp_list->list), struct cc_chirp, list);
 }
 
-static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 new_estimate_ns)
+static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc,
+			   u32 new_estimate_ns, u16 chirp_number)
 {
 	u32 prev_estimate_ns = pc->gap_avg_ns;
 
@@ -140,7 +139,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 		new_estimate_ns = prev_estimate_ns * 2;
 	}
 
-	if (pc->gap_avg_ns == INITIAL_GAP_AVG) {
+	if (pc->gap_avg_ns == INITIAL_GAP_AVG && chirp_number == 0) {
 		pc->gap_avg_ns = new_estimate_ns;
 		return;
 	}
@@ -522,7 +521,8 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			new_estimate = c->gap_total / (c->N - 1);
 
 			if (c->valid)
-				update_gap_avg(tp, pc, new_estimate);
+				update_gap_avg(tp, pc, new_estimate,
+					       c->chirp_number);
 
 			LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,chirp_num=%u,estimate=%u,new_avg=%u,pkts_out=%u,nxt_chirp=%u,min_rtt=%u,ack_cnt=%u\n",
 				   ntohl(sk->sk_rcv_saddr),
