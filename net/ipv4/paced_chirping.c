@@ -146,6 +146,7 @@ static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 {
 	return READ_ONCE(tp->write_seq) - tp->snd_nxt >= tp->mss_cache * N;
 }
+
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
 {
 	return SKB_TRUESIZE(tp->mss_cache) * CHIRP_SIZE  < refcount_read(&sk->sk_wmem_alloc);
@@ -176,7 +177,6 @@ u32 paced_chirping_new_chirp (struct sock *sk, struct paced_chirping *pc)
 			last_chirp->begin_seq = tp->chirp.begin_seq;
 			last_chirp->end_seq = tp->chirp.end_seq;
 			last_chirp->fully_sent = 1;
-
 		}
 	}
 
