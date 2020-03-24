@@ -144,19 +144,7 @@ static void update_gap_avg(struct tcp_sock *tp, struct paced_chirping *pc, u32 n
 
 static bool enough_data_for_chirp (struct sock *sk, struct tcp_sock *tp, int N)
 {
-	int enough = SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out) <= sk->sk_wmem_queued;
-	/*if (!enough) {
-		LOG_PRINT((KERN_INFO "[PC] %u-%u-%hu-%hu,need=%lu,total=%lu,have=%d,engh=%d\n",
-			   ntohl(sk->sk_rcv_saddr),
-			   ntohl(sk->sk_daddr),
-			   sk->sk_num,
-			   ntohs(sk->sk_dport),
-			   SKB_TRUESIZE(tp->mss_cache)*N,
-			   SKB_TRUESIZE(tp->mss_cache) * (N + tp->packets_out),
-			   sk->sk_wmem_queued,
-			   enough));
-			   }*/
-	return enough;
+	return READ_ONCE(tp->write_seq) - tp->snd_nxt >= tp->mss_cache * N;
 }
 static bool enough_data_committed(struct sock *sk, struct tcp_sock *tp)
 {
