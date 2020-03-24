@@ -411,8 +411,9 @@ void paced_chirping_update(struct sock *sk, struct paced_chirping *pc, const str
 			continue;
 		}
 
-		if (c->chirp_number >= 2U && c->chirp_number == pc->round_start
-		    && c->qdelay_index == 0) {
+		if (c->chirp_number >= 2U &&
+		    c->chirp_number == pc->round_start &&
+		    c->qdelay_index == 0) {
 			start_new_round(tp, pc);
 		}
 
